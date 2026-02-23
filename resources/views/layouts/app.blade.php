@@ -219,10 +219,80 @@
             .app-main .d-flex.justify-content-between, .app-main .d-flex.justify-content-end { flex-wrap: wrap; gap: 0.5rem; }
             .app-main .btn-group .btn { min-height: 44px; }
         }
+
+        /* Режим оценщика: без сайдбара, только шапка + контент */
+        .appraiser-only-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+            padding-top: env(safe-area-inset-top);
+            background: var(--lombard-primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 1030;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .appraiser-only-header .brand { color: #fff; font-weight: 700; font-size: 1.15rem; text-decoration: none; }
+        .appraiser-only-header .brand:hover { color: var(--lombard-accent-hover); }
+        .appraiser-only-header .btn-outline-light {
+            border-color: rgba(255,255,255,0.5);
+            color: #fff;
+            min-height: 44px;
+            padding: 0.4rem 1rem;
+        }
+        .appraiser-only-header .btn-outline-light:hover {
+            background: var(--lombard-accent);
+            border-color: var(--lombard-accent);
+            color: #fff;
+        }
+        .appraiser-only-main {
+            padding-top: calc(56px + env(safe-area-inset-top) + 1rem);
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+            padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+            min-height: 100vh;
+            width: 100%;
+            background: #f8f9fa;
+        }
+        .appraiser-only-main .btn { min-height: 44px; padding: 0.5rem 1rem; }
+        .appraiser-only-main .form-control, .appraiser-only-main .form-select {
+            min-height: 44px;
+            font-size: 16px;
+        }
     </style>
     @stack('styles')
 </head>
 <body class="d-flex">
+    @if(auth()->user() && auth()->user()->role === 'appraiser')
+    <header class="appraiser-only-header">
+        <a href="{{ route('appraiser.home') }}" class="brand">Оценщик</a>
+        <form method="post" action="{{ route('logout') }}" class="d-inline">
+            @csrf
+            <button type="submit" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-right"></i> Выход</button>
+        </form>
+    </header>
+    <main class="appraiser-only-main">
+        @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show">{{ session('success') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        @endif
+        @if(session('error'))
+            <div class="alert alert-danger alert-dismissible fade show">{{ session('error') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        @endif
+        @if($errors->any())
+            <div class="alert alert-danger alert-dismissible fade show">
+                <ul class="mb-0">@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+        @yield('content')
+    </main>
+    @else
     <header class="app-mobile-header">
         <button type="button" class="btn-menu" id="sidebar-toggle" aria-label="Меню"><i class="bi bi-list"></i></button>
         <a class="navbar-brand" href="{{ route('dashboard') }}">{{ config('services.lombard.name', 'Ломбард') }}</a>
@@ -307,6 +377,7 @@
         @endif
         @yield('content')
     </main>
+    @endif
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       (function () {
@@ -355,7 +426,8 @@
         }
         if (btn) btn.addEventListener('click', toggle);
         if (overlay) overlay.addEventListener('click', close);
-        document.getElementById('app-sidebar').querySelectorAll('.nav-link').forEach(function (a) {
+        var sidebar = document.getElementById('app-sidebar');
+        if (sidebar) sidebar.querySelectorAll('.nav-link').forEach(function (a) {
           a.addEventListener('click', close);
         });
       })();

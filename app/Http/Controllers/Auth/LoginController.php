@@ -29,7 +29,12 @@ class LoginController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard'));
+        $user = Auth::user();
+        $defaultUrl = ($user && $user->role === 'appraiser')
+            ? route('appraiser.home')
+            : route('dashboard');
+
+        return redirect()->intended($defaultUrl);
     }
 
     public function logout(Request $request)
