@@ -154,7 +154,9 @@
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('expenses.index')); ?>"><i class="bi bi-cash-expense"></i> Расходы</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('employees.index')); ?>"><i class="bi bi-currency-dollar"></i> ФОТ</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('bank-accounts.index')); ?>"><i class="bi bi-bank"></i> Банк</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?php echo e(route('documents.index')); ?>"><i class="bi bi-files"></i> Все документы</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('chart-of-accounts.index')); ?>"><i class="bi bi-journal-ruled"></i> План счетов</a></li>
+                    <li class="nav-item"><a class="nav-link" href="<?php echo e(route('document-ledger-templates.index')); ?>"><i class="bi bi-journal-check"></i> Шаблоны проводок</a></li>
                     <?php endif; ?>
                 </ul>
             </li>

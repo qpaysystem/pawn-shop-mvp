@@ -1,0 +1,63 @@
+=== Выкладка на Timeweb: что выполнить ===
+
+1. ЗАГРУЗИТЬ АРХИВ НА СЕРВЕР (выполнить у себя на компьютере в терминале)
+
+   Подставьте свой логин и хост из панели Timeweb (раздел SSH).
+
+   Если вход по ключу (например id_ed25519_timeweb):
+
+   scp -i ~/.ssh/id_ed25519_timeweb /Users/evgeny/pawn-shop-mvp-deploy.tar.gz ВАШ_ЛОГИН@ВАШ_ХОСТ:~
+
+   Если по паролю:
+
+   scp /Users/evgeny/pawn-shop-mvp-deploy.tar.gz ВАШ_ЛОГИН@ВАШ_ХОСТ:~
+
+   В конце обязательно :~ (домашняя папка на сервере). Путь к архиву — один файл, без / в конце.
+
+
+2. ПОДКЛЮЧИТЬСЯ ПО SSH И РАСПАКОВАТЬ
+
+   С ключом: ssh -i ~/.ssh/id_ed25519_timeweb ВАШ_ЛОГИН@ВАШ_ХОСТ
+   По паролю: ssh ВАШ_ЛОГИН@ВАШ_ХОСТ
+
+   Затем на сервере по очереди:
+
+   mkdir -p ~/pawn-shop-mvp
+   cd ~/pawn-shop-mvp
+   tar xzf ../pawn-shop-mvp-deploy.tar.gz
+
+
+3. СИМЛИНК И НАСТРОЙКА (на сервере, в том же сеансе SSH)
+
+   rm -rf ~/pawn-shop-mvp/public_html
+   ln -s ~/pawn-shop-mvp/public ~/pawn-shop-mvp/public_html
+
+   cd ~/pawn-shop-mvp
+   curl -sS https://getcomposer.org/installer | php
+   php composer.phar install --no-dev --optimize-autoloader
+   cp .env.example .env
+   php artisan key:generate
+   nano .env
+
+   В nano задайте: APP_ENV=production, APP_DEBUG=false, APP_URL=https://ваш-домен.ru,
+   DB_DATABASE=..., DB_USERNAME=..., DB_PASSWORD=... (данные БД из панели Timeweb).
+   Сохранить: Ctrl+O, Enter. Выход: Ctrl+X.
+
+   php artisan migrate --force
+   php artisan db:seed --force
+   php artisan storage:link
+   mkdir -p storage/app/public/items
+   php artisan config:cache
+   php artisan route:cache
+   php artisan view:cache
+   chmod -R 775 storage bootstrap/cache
+
+
+4. В ПАНЕЛИ TIMEWEB
+
+   Сайты → Мой сайт → корневая директория: папка pawn-shop-mvp (или полный путь к ней).
+
+
+5. ПРОВЕРКА
+
+   Открыть в браузере ваш домен. Логин: admin@example.com, пароль: password.

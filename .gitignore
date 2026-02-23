@@ -1,6 +1,8 @@
 /node_modules
 /public/hot
 /public/storage
+/bootstrap/cache/*.php
+!/bootstrap/cache/.gitkeep
 /storage/*.key
 /storage/logs/*
 /storage/framework/sessions/*
@@ -22,4 +24,6 @@ yarn-error.log
 /.fleet
 /.idea
 .DS_Store
+._*
+public_html
 composer.phar

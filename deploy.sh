@@ -18,6 +18,7 @@ git pull --no-edit || true
 
 echo "2. Установка зависимостей (без dev)..."
 $COMPOSER install --no-dev --optimize-autoloader --no-interaction
+php artisan package:discover
 
 echo "3. Миграции..."
 php artisan migrate --force

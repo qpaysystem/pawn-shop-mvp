@@ -92,7 +92,7 @@
         <?php $__empty_1 = true; $__currentLoopData = $documents; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $d): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
         <tr>
             <td><?php echo e(\Carbon\Carbon::parse($d->document_date)->format('d.m.Y')); ?></td>
-            <td><?php echo e($d->document_number); ?></td>
+            <td><a href="<?php echo e(route('cash.show', $d)); ?>"><?php echo e($d->document_number); ?></a></td>
             <td>
                 <?php if(isset($filterClient) && $filterClient): ?>
                     <?php echo e($d->store?->name ?? '—'); ?>
@@ -116,6 +116,7 @@
             <td class="small"><?php echo e($d->createdByUser?->name ?? '—'); ?></td>
             <?php if(auth()->user()->canProcessSales()): ?>
             <td>
+                <a href="<?php echo e(route('cash.edit', $d)); ?>" class="btn btn-sm btn-outline-primary me-1">Изменить</a>
                 <form action="<?php echo e(route('cash.destroy', $d)); ?>" method="post" class="d-inline" onsubmit="return confirm('Удалить документ?')"><?php echo csrf_field(); ?> <?php echo method_field('DELETE'); ?><button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button></form>
             </td>
             <?php endif; ?>

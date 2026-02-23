@@ -27,6 +27,15 @@
         </select>
     </div>
     <?php endif; ?>
+    <div class="col-auto">
+        <label class="form-label">Клиент</label>
+        <select name="client_id" class="form-select form-select-sm" style="width:auto; max-width:220px" onchange="this.form.submit()">
+            <option value="">Все</option>
+            <?php $__currentLoopData = $clients; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $c): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                <option value="<?php echo e($c->id); ?>" <?php echo e($clientId == $c->id ? 'selected' : ''); ?>><?php echo e($c->last_name); ?> <?php echo e($c->first_name); ?></option>
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </select>
+    </div>
     <div class="col-auto align-self-end">
         <button type="submit" class="btn btn-primary btn-sm">Показать</button>
     </div>
@@ -61,7 +70,7 @@
                         <td class="text-end"><?php echo e(number_format($row->credit, 2, ',', ' ')); ?></td>
                         <td class="text-end"><strong><?php echo e(number_format($row->balance_after, 2, ',', ' ')); ?></strong></td>
                         <td>
-                            <a href="<?php echo e(route('chart-of-accounts.show', ['account' => $row->account, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'store_id' => $storeId])); ?>" class="btn btn-sm btn-outline-primary">Карточка</a>
+                            <a href="<?php echo e(route('chart-of-accounts.show', ['account' => $row->account, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'store_id' => $storeId, 'client_id' => $clientId])); ?>" class="btn btn-sm btn-outline-primary">Карточка</a>
                         </td>
                     </tr>
                     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>

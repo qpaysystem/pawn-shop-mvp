@@ -140,9 +140,10 @@ ln -s ~/pawn-shop-mvp/public ~/pawn-shop-mvp/public_html
 cd ~/pawn-shop-mvp
 curl -sS https://getcomposer.org/installer | php
 php composer.phar install --no-dev --optimize-autoloader
+php artisan package:discover
 ```
 
-Дождитесь окончания. Должна появиться папка `vendor`.
+Дождитесь окончания. Должна появиться папка `vendor`. После `composer install --no-dev` выполните `php artisan package:discover`, чтобы кэш в `bootstrap/cache/` содержал только установленные пакеты — иначе возможна ошибка *Class "NunoMaduro\Collision\...\CollisionServiceProvider" not found*.
 
 ### Шаг 9. Создать файл .env
 
@@ -258,6 +259,7 @@ ln -s ~/pawn-shop-mvp/public ~/pawn-shop-mvp/public_html
 cd ~/pawn-shop-mvp
 curl -sS https://getcomposer.org/installer | php
 php composer.phar install --no-dev --optimize-autoloader
+php artisan package:discover
 cp .env.example .env
 php artisan key:generate
 nano .env   # заполнить APP_URL, DB_* и сохранить
@@ -275,23 +277,135 @@ chmod -R 775 storage bootstrap/cache
 
 ---
 
-## Обновление сайта после изменений в коде
+## Git на Timeweb (деплой через git pull)
 
-Когда вы внесли изменения в проект и снова загрузили файлы на сервер (через Git или SCP):
+Если проект уже выложен **без Git** (архивом), можно подключить репозиторий и дальше обновлять сайт через `git pull`.
+
+### 1. Проверить, что Git установлен
+
+По SSH:
+
+```bash
+git --version
+```
+
+Если команды нет — в панели Timeweb посмотрите, доступна ли установка Git или обратитесь в поддержку.
+
+### 2. Подключить репозиторий к существующей папке проекта
+
+На сервере проект лежит в `~/pawn-shop-mvp` без истории Git. Инициализируем репозиторий и привязываем `origin`:
 
 ```bash
 cd ~/pawn-shop-mvp
-# Если используете Git:
-git pull
-
-php composer.phar install --no-dev --optimize-autoloader
-php artisan migrate --force
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+git init
+git remote add origin https://github.com/qpaysystem/pawn-shop-mvp.git
+git fetch origin main
+git reset --hard origin/main
 ```
 
-Или запустите скрипт обновления (если есть): `./deploy.sh`
+- Если репозиторий **приватный**, вместо `https://github.com/...` понадобится авторизация (см. шаг 4).
+- После `git reset --hard` несохранённые локальные изменения на сервере пропадут; файл `.env` будет перезаписан из репозитория, если он там есть. Чтобы **не затирать .env**, перед `git reset` сделайте копию: `cp .env .env.backup`, а после — восстановите: `mv .env.backup .env`.
+
+Безопасный вариант (сохранить .env и vendor):
+
+```bash
+cd ~/pawn-shop-mvp
+cp .env .env.local
+git init
+git remote add origin https://github.com/qpaysystem/pawn-shop-mvp.git
+git fetch origin main
+git reset --hard origin/main
+mv .env.local .env
+```
+
+### 3. Если настраиваете Git «с нуля» (новая копия проекта)
+
+Сделать клон в домашнюю директорию:
+
+```bash
+cd ~
+git clone https://github.com/qpaysystem/pawn-shop-mvp.git pawn-shop-mvp
+cd pawn-shop-mvp
+```
+
+Дальше: симлинк `public_html`, Composer, `.env`, миграции, кэш — как в основной инструкции выше.
+
+### 4. Доступ к приватному репозиторию GitHub
+
+**Вариант А — по HTTPS с токеном**
+
+1. GitHub → Settings → Developer settings → Personal access tokens → создать токен (права `repo`).
+2. На сервере при первом `git fetch` или `git pull` указать логин и вместо пароля — токен.
+
+Или сохранить URL с токеном (не показывать токен в логах):
+
+```bash
+git remote set-url origin https://ВАШ_ЛОГИН:ТОКЕН@github.com/qpaysystem/pawn-shop-mvp.git
+```
+
+**Вариант Б — по SSH (deploy key)**
+
+1. На сервере сгенерировать ключ (если нет):  
+   `ssh-keygen -t ed25519 -C "timeweb" -f ~/.ssh/id_ed25519_github -N ""`
+2. Вывести публичный ключ:  
+   `cat ~/.ssh/id_ed25519_github.pub`  
+   Скопировать вывод.
+3. В GitHub: репозиторий → Settings → Deploy keys → Add deploy key → вставить ключ.
+4. На сервере переключить remote на SSH и проверить:
+
+```bash
+cd ~/pawn-shop-mvp
+git remote set-url origin git@github.com:qpaysystem/pawn-shop-mvp.git
+GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_github -o StrictHostKeyChecking=accept-new" git fetch origin main
+```
+
+При необходимости в `~/.ssh/config` добавить:
+
+```
+Host github.com
+  IdentityFile ~/.ssh/id_ed25519_github
+  StrictHostKeyChecking accept-new
+```
+
+### 5. Обновление сайта после изменений в коде
+
+**Как перенести в Git и сразу на боевой:**
+
+1. **У себя на компьютере** (в папке проекта):
+   ```bash
+   git add .
+   git commit -m "описание изменений"
+   git push origin main
+   ```
+
+2. **На сервере по SSH** — один из вариантов:
+
+   **Вариант А — скрипт (рекомендуется):**
+   ```bash
+   cd ~/pawn-shop-mvp
+   git pull origin main
+   ./deploy.sh
+   ```
+   В `deploy.sh` уже учтён вызов `php composer.phar`, если он лежит в каталоге проекта.
+
+   **Вариант Б — команды вручную:**
+   ```bash
+   cd ~/pawn-shop-mvp
+   git pull origin main
+   /usr/bin/php composer.phar install --no-dev --optimize-autoloader
+   /usr/bin/php artisan package:discover
+   /usr/bin/php artisan migrate --force
+   /usr/bin/php artisan config:cache
+   /usr/bin/php artisan route:cache
+   ```
+
+   **Вариант В — с локальной машины одной строкой** (подставьте свой логин и хост):
+   ```bash
+   git push origin main && ssh cf89938@vh430.timeweb.ru 'cd ~/pawn-shop-mvp && git pull origin main && ./deploy.sh'
+   ```
+   Тогда после `git push` сразу выполнится подключение по SSH и деплой на сервере.
+
+**Важно:** после `git pull` не перезаписывайте `.env` из репозитория — на сервере должны оставаться свои `APP_KEY`, `DB_*`, `LOG_CHANNEL` и т.д. Если в репозитории есть `.env.example`, используйте его только как образец.
 
 ---
 
