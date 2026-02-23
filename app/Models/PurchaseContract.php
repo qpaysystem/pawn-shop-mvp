@@ -10,6 +10,13 @@ class PurchaseContract extends Model
 {
     use HasFactory;
 
+    protected static function booted(): void
+    {
+        static::deleting(function (PurchaseContract $doc) {
+            LedgerEntry::where('document_type', 'purchase_contract')->where('document_id', $doc->id)->delete();
+        });
+    }
+
     protected $fillable = [
         'contract_number', 'client_id', 'item_id', 'appraiser_id', 'store_id',
         'purchase_amount', 'purchase_date',

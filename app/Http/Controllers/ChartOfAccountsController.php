@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\Client;
 use App\Models\LedgerEntry;
 use App\Models\Store;
 use Illuminate\Http\Request;
@@ -22,12 +23,14 @@ class ChartOfAccountsController extends Controller
     {
         $storeIds = auth()->user()->allowedStoreIds();
         $stores = Store::whereIn('id', $storeIds)->where('is_active', true)->orderBy('name')->get();
+        $clients = Client::orderBy('last_name')->orderBy('first_name')->get();
 
         $dateFrom = $request->get('date_from', now()->startOfMonth()->format('Y-m-d'));
         $dateTo = $request->get('date_to', now()->format('Y-m-d'));
         $storeId = $request->get('store_id');
+        $clientId = $request->get('client_id') ? (int) $request->get('client_id') : null;
 
-        $query = LedgerEntry::with(['store', 'createdByUser'])
+        $query = LedgerEntry::with(['store', 'createdByUser', 'client'])
             ->where('account_id', $account->id)
             ->whereBetween('entry_date', [$dateFrom, $dateTo]);
 
@@ -37,6 +40,9 @@ class ChartOfAccountsController extends Controller
             $query->where(function ($q) use ($storeIds) {
                 $q->whereIn('store_id', $storeIds)->orWhereNull('store_id');
             });
+        }
+        if ($clientId) {
+            $query->where('client_id', $clientId);
         }
 
         $entries = $query->orderBy('entry_date')->orderBy('id')->paginate(50)->withQueryString();
@@ -50,14 +56,17 @@ class ChartOfAccountsController extends Controller
                 $q->whereIn('store_id', $storeIds)->orWhereNull('store_id');
             });
         }
+        if ($clientId) {
+            $totals->where('client_id', $clientId);
+        }
         $totalDebit = (float) $totals->sum('debit');
         $totalCredit = (float) $totals->sum('credit');
 
-        $balanceBefore = $this->balanceBefore($account->id, $dateFrom, $storeIds, $storeId);
+        $balanceBefore = $this->balanceBefore($account->id, $dateFrom, $storeIds, $storeId, $clientId);
         $balanceAfter = $balanceBefore + $totalDebit - $totalCredit;
 
         return view('chart-of-accounts.show', compact(
-            'account', 'entries', 'stores', 'dateFrom', 'dateTo', 'storeId',
+            'account', 'entries', 'stores', 'clients', 'dateFrom', 'dateTo', 'storeId', 'clientId',
             'totalDebit', 'totalCredit', 'balanceBefore', 'balanceAfter'
         ));
     }
@@ -67,10 +76,12 @@ class ChartOfAccountsController extends Controller
     {
         $storeIds = auth()->user()->allowedStoreIds();
         $stores = Store::whereIn('id', $storeIds)->where('is_active', true)->orderBy('name')->get();
+        $clients = Client::orderBy('last_name')->orderBy('first_name')->get();
 
         $dateFrom = $request->get('date_from', now()->startOfMonth()->format('Y-m-d'));
         $dateTo = $request->get('date_to', now()->format('Y-m-d'));
         $storeId = $request->get('store_id');
+        $clientId = $request->get('client_id') ? (int) $request->get('client_id') : null;
 
         $accounts = Account::where('is_active', true)->orderBy('sort_order')->orderBy('code')->get();
 
@@ -84,8 +95,11 @@ class ChartOfAccountsController extends Controller
                     $q2->whereIn('store_id', $storeIds)->orWhereNull('store_id');
                 });
             }
+            if ($clientId) {
+                $q->where('client_id', $clientId);
+            }
 
-            $balanceBefore = $this->balanceBefore($account->id, $dateFrom, $storeIds, $storeId);
+            $balanceBefore = $this->balanceBefore($account->id, $dateFrom, $storeIds, $storeId, $clientId);
             $turnover = $q->whereBetween('entry_date', [$dateFrom, $dateTo])
                 ->selectRaw('COALESCE(SUM(debit), 0) as debit, COALESCE(SUM(credit), 0) as credit')
                 ->first();
@@ -105,12 +119,12 @@ class ChartOfAccountsController extends Controller
         }
 
         return view('chart-of-accounts.turnover-balance', compact(
-            'accounts', 'rows', 'stores', 'dateFrom', 'dateTo', 'storeId'
+            'accounts', 'rows', 'stores', 'clients', 'dateFrom', 'dateTo', 'storeId', 'clientId'
         ));
     }
 
     /** Сальдо по счёту на дату (до начала периода). */
-    private function balanceBefore(int $accountId, string $dateFrom, array $storeIds, ?string $storeId): float
+    private function balanceBefore(int $accountId, string $dateFrom, array $storeIds, ?string $storeId, ?int $clientId = null): float
     {
         $q = LedgerEntry::where('account_id', $accountId)->where('entry_date', '<', $dateFrom);
         if ($storeId && in_array((int) $storeId, $storeIds, true)) {
@@ -119,6 +133,9 @@ class ChartOfAccountsController extends Controller
             $q->where(function ($q2) use ($storeIds) {
                 $q2->whereIn('store_id', $storeIds)->orWhereNull('store_id');
             });
+        }
+        if ($clientId) {
+            $q->where('client_id', $clientId);
         }
         $sum = $q->selectRaw('COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) as balance')->value('balance');
         return (float) ($sum ?? 0);

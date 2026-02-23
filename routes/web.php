@@ -11,6 +11,8 @@ use App\Http\Controllers\CashController;
 use App\Http\Controllers\ChartOfAccountsController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommissionContractController;
+use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\DocumentLedgerTemplateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
@@ -128,7 +130,19 @@ Route::middleware('auth')->group(function () {
     Route::get('cash/create', [CashController::class, 'create'])->name('cash.create');
     Route::get('cash/report', [CashController::class, 'report'])->name('cash.report');
     Route::post('cash', [CashController::class, 'store'])->name('cash.store');
+    Route::get('cash/{cashDocument}', [CashController::class, 'show'])->name('cash.show');
+    Route::get('cash/{cashDocument}/edit', [CashController::class, 'edit'])->name('cash.edit');
+    Route::put('cash/{cashDocument}', [CashController::class, 'update'])->name('cash.update');
     Route::delete('cash/{cashDocument}', [CashController::class, 'destroy'])->name('cash.destroy');
+
+    // Все документы (сводный список)
+    Route::get('documents', [DocumentController::class, 'index'])->name('documents.index');
+
+    // Шаблоны проводок по типам документов (настройка ОСВ)
+    Route::get('document-ledger-templates', [DocumentLedgerTemplateController::class, 'index'])->name('document-ledger-templates.index');
+    Route::get('document-ledger-templates/create', [DocumentLedgerTemplateController::class, 'create'])->name('document-ledger-templates.create');
+    Route::post('document-ledger-templates', [DocumentLedgerTemplateController::class, 'store'])->name('document-ledger-templates.store');
+    Route::delete('document-ledger-templates/{documentLedgerTemplate}', [DocumentLedgerTemplateController::class, 'destroy'])->name('document-ledger-templates.destroy');
 
     // План счетов и отчётность
     Route::get('chart-of-accounts', [ChartOfAccountsController::class, 'index'])->name('chart-of-accounts.index');

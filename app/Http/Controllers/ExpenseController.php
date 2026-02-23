@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DocumentLedgerTemplate;
 use App\Models\Expense;
 use App\Models\ExpenseType;
+use App\Models\LedgerEntry;
 use App\Models\Store;
 use Illuminate\Http\Request;
 
@@ -50,7 +52,22 @@ class ExpenseController extends Controller
 
     public function show(Expense $expense)
     {
+        if ($expense->store_id && ! in_array($expense->store_id, auth()->user()->allowedStoreIds(), true)) {
+            abort(403);
+        }
         $expense->load(['expenseType', 'store', 'createdByUser']);
-        return view('expenses.show', compact('expense'));
+
+        $ledgerEntries = LedgerEntry::where('document_type', 'expense')
+            ->where('document_id', $expense->id)
+            ->with('account')
+            ->orderBy('id')
+            ->get();
+        $templates = DocumentLedgerTemplate::forDocumentType('expense');
+        $documentType = 'expense';
+        $documentId = $expense->id;
+
+        return view('expenses.show', compact(
+            'expense', 'ledgerEntries', 'templates', 'documentType', 'documentId'
+        ));
     }
 }

@@ -9,6 +9,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** Документ начисления ФОТ. */
 class PayrollAccrual extends Model
 {
+    protected static function booted(): void
+    {
+        static::deleting(function (PayrollAccrual $doc) {
+            LedgerEntry::where('document_type', 'payroll_accrual')->where('document_id', $doc->id)->delete();
+        });
+    }
+
     protected $fillable = ['number', 'period_month', 'period_year', 'accrual_date', 'total_amount', 'notes', 'created_by'];
 
     protected function casts(): array

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\CommissionContract;
+use App\Models\DocumentLedgerTemplate;
+use App\Models\LedgerEntry;
 use App\Services\LedgerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +39,18 @@ class CommissionContractController extends Controller
         }
         $commissionContract->load(['client', 'item.status', 'store', 'appraiser', 'soldByUser']);
 
-        return view('commission-contracts.show', compact('commissionContract'));
+        $ledgerEntries = LedgerEntry::where('document_type', 'commission_contract')
+            ->where('document_id', $commissionContract->id)
+            ->with('account')
+            ->orderBy('id')
+            ->get();
+        $templates = DocumentLedgerTemplate::forDocumentType('commission_contract');
+        $documentType = 'commission_contract';
+        $documentId = $commissionContract->id;
+
+        return view('commission-contracts.show', compact(
+            'commissionContract', 'ledgerEntries', 'templates', 'documentType', 'documentId'
+        ));
     }
 
     /** Печатная форма договора комиссии. */
@@ -80,7 +93,8 @@ class CommissionContractController extends Controller
                 $commissionContract->store_id,
                 'commission_contract',
                 $commissionContract->id,
-                'Продажа по договору комиссии №' . $commissionContract->contract_number
+                'Продажа по договору комиссии №' . $commissionContract->contract_number,
+                $commissionContract->client_id
             );
         }
 

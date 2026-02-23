@@ -273,8 +273,8 @@ class AcceptItemController extends Controller
 
                 $this->createClientVisitForPawn($storeId, $client->id, $visitPurpose, $contract->id);
                 $ledger = app(LedgerService::class);
-                $ledger->post(\App\Models\Account::CODE_LOANS, \App\Models\Account::CODE_CASH, $loanAmount, \Carbon\Carbon::parse($request->loan_date), $storeId, 'pawn_contract', $contract->id, 'Договор залога №' . $contract->contract_number);
-                $ledger->post(\App\Models\Account::CODE_PLEDGE, \App\Models\Account::CODE_SETTLEMENTS_OTHER, $loanAmount, \Carbon\Carbon::parse($request->loan_date), $storeId, 'pawn_contract', $contract->id, 'Поступление товара в залог №' . $contract->contract_number);
+                $ledger->post(\App\Models\Account::CODE_LOANS, \App\Models\Account::CODE_CASH, $loanAmount, \Carbon\Carbon::parse($request->loan_date), $storeId, 'pawn_contract', $contract->id, 'Договор залога №' . $contract->contract_number, $client->id);
+                $ledger->post(\App\Models\Account::CODE_PLEDGE, \App\Models\Account::CODE_SETTLEMENTS_OTHER, $loanAmount, \Carbon\Carbon::parse($request->loan_date), $storeId, 'pawn_contract', $contract->id, 'Поступление товара в залог №' . $contract->contract_number, $client->id);
 
                 return redirect()->route('pawn-contracts.print', $contract)->with('success', 'Договор залога создан. Товар принят.');
             }
@@ -311,7 +311,7 @@ class AcceptItemController extends Controller
                 DB::commit();
 
                 $this->createClientVisitForPurchase($storeId, $client->id, $visitPurpose, $contract->id);
-                app(LedgerService::class)->post(\App\Models\Account::CODE_GOODS, \App\Models\Account::CODE_CASH, $purchaseAmount, \Carbon\Carbon::parse($purchaseDate), $storeId, 'purchase_contract', $contract->id, 'Договор скупки №' . $contract->contract_number);
+                app(LedgerService::class)->post(\App\Models\Account::CODE_GOODS, \App\Models\Account::CODE_CASH, $purchaseAmount, \Carbon\Carbon::parse($purchaseDate), $storeId, 'purchase_contract', $contract->id, 'Договор скупки №' . $contract->contract_number, $contract->client_id);
 
                 return redirect()->route('purchase-contracts.print', $contract)->with('success', 'Договор скупки создан. Товар выкуплен.');
             }

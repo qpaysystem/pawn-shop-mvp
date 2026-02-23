@@ -94,7 +94,7 @@
         @forelse($documents as $d)
         <tr>
             <td>{{ \Carbon\Carbon::parse($d->document_date)->format('d.m.Y') }}</td>
-            <td>{{ $d->document_number }}</td>
+            <td><a href="{{ route('cash.show', $d) }}">{{ $d->document_number }}</a></td>
             <td>
                 @if(isset($filterClient) && $filterClient)
                     {{ $d->store?->name ?? '—' }}
@@ -116,6 +116,7 @@
             <td class="small">{{ $d->createdByUser?->name ?? '—' }}</td>
             @if(auth()->user()->canProcessSales())
             <td>
+                <a href="{{ route('cash.edit', $d) }}" class="btn btn-sm btn-outline-primary me-1">Изменить</a>
                 <form action="{{ route('cash.destroy', $d) }}" method="post" class="d-inline" onsubmit="return confirm('Удалить документ?')">@csrf @method('DELETE')<button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button></form>
             </td>
             @endif

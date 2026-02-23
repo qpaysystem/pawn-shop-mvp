@@ -7,6 +7,14 @@
     <h1 class="h4 mb-0">Начисление ФОТ {{ $payrollAccrual->number }}</h1>
     <a href="{{ route('payroll-accruals.index') }}" class="btn btn-outline-secondary">К списку</a>
 </div>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-document">Документ</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-ledger">Бухгалтерские проводки</a></li>
+</ul>
+
+<div class="tab-content">
+<div class="tab-pane fade show active" id="tab-document">
 <div class="card mb-3">
     <div class="card-body">
         <p><strong>Период:</strong> {{ $payrollAccrual->period_label }}</p>
@@ -31,5 +39,15 @@
             </tbody>
         </table>
     </div>
+</div>
+</div>
+<div class="tab-pane fade" id="tab-ledger">
+    @include('documents._ledger_tab', [
+        'documentType' => $documentType,
+        'documentId' => $documentId,
+        'ledgerEntries' => $ledgerEntries,
+        'templates' => $templates,
+    ])
+</div>
 </div>
 @endsection

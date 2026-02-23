@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** Кассовый документ (приход/расход). */
 class CashDocument extends Model
 {
+    protected static function booted(): void
+    {
+        static::deleting(function (CashDocument $doc) {
+            LedgerEntry::where('document_type', 'cash_document')->where('document_id', $doc->id)->delete();
+        });
+    }
+
     protected $fillable = [
         'store_id',
         'target_store_id',

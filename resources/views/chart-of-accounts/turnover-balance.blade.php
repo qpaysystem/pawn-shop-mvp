@@ -29,6 +29,15 @@
         </select>
     </div>
     @endif
+    <div class="col-auto">
+        <label class="form-label">Клиент</label>
+        <select name="client_id" class="form-select form-select-sm" style="width:auto; max-width:220px" onchange="this.form.submit()">
+            <option value="">Все</option>
+            @foreach($clients as $c)
+                <option value="{{ $c->id }}" {{ $clientId == $c->id ? 'selected' : '' }}>{{ $c->last_name }} {{ $c->first_name }}</option>
+            @endforeach
+        </select>
+    </div>
     <div class="col-auto align-self-end">
         <button type="submit" class="btn btn-primary btn-sm">Показать</button>
     </div>
@@ -63,7 +72,7 @@
                         <td class="text-end">{{ number_format($row->credit, 2, ',', ' ') }}</td>
                         <td class="text-end"><strong>{{ number_format($row->balance_after, 2, ',', ' ') }}</strong></td>
                         <td>
-                            <a href="{{ route('chart-of-accounts.show', ['account' => $row->account, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'store_id' => $storeId]) }}" class="btn btn-sm btn-outline-primary">Карточка</a>
+                            <a href="{{ route('chart-of-accounts.show', ['account' => $row->account, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'store_id' => $storeId, 'client_id' => $clientId]) }}" class="btn btn-sm btn-outline-primary">Карточка</a>
                         </td>
                     </tr>
                     @empty

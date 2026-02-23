@@ -10,6 +10,13 @@ class PawnContract extends Model
 {
     use HasFactory;
 
+    protected static function booted(): void
+    {
+        static::deleting(function (PawnContract $doc) {
+            LedgerEntry::where('document_type', 'pawn_contract')->where('document_id', $doc->id)->delete();
+        });
+    }
+
     protected $fillable = [
         'contract_number', 'client_id', 'item_id', 'appraiser_id', 'store_id',
         'loan_amount', 'loan_percent', 'loan_date', 'expiry_date', 'buyback_amount',

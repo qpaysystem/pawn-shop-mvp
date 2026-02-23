@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** Документ начисления расхода. */
 class Expense extends Model
 {
+    protected static function booted(): void
+    {
+        static::deleting(function (Expense $doc) {
+            LedgerEntry::where('document_type', 'expense')->where('document_id', $doc->id)->delete();
+        });
+    }
+
     protected $fillable = ['number', 'expense_type_id', 'store_id', 'amount', 'expense_date', 'description', 'created_by'];
 
     protected function casts(): array

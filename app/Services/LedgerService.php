@@ -20,7 +20,8 @@ class LedgerService
         ?int $storeId = null,
         ?string $documentType = null,
         ?int $documentId = null,
-        ?string $comment = null
+        ?string $comment = null,
+        ?int $clientId = null
     ): void {
         if ($amount <= 0) {
             return;
@@ -35,6 +36,7 @@ class LedgerService
         LedgerEntry::create([
             'account_id' => $debitAccount->id,
             'store_id' => $storeId,
+            'client_id' => $clientId,
             'document_type' => $documentType,
             'document_id' => $documentId,
             'entry_date' => $entryDate,
@@ -47,6 +49,7 @@ class LedgerService
         LedgerEntry::create([
             'account_id' => $creditAccount->id,
             'store_id' => $storeId,
+            'client_id' => $clientId,
             'document_type' => $documentType,
             'document_id' => $documentId,
             'entry_date' => $entryDate,
@@ -67,7 +70,8 @@ class LedgerService
         int $storeIdTo,
         ?string $documentType = null,
         ?int $documentId = null,
-        ?string $comment = null
+        ?string $comment = null,
+        ?int $clientId = null
     ): void {
         if ($amount <= 0) {
             return;
@@ -80,6 +84,7 @@ class LedgerService
         LedgerEntry::create([
             'account_id' => $account->id,
             'store_id' => $storeIdFrom,
+            'client_id' => $clientId,
             'document_type' => $documentType,
             'document_id' => $documentId,
             'entry_date' => $entryDate,
@@ -91,6 +96,7 @@ class LedgerService
         LedgerEntry::create([
             'account_id' => $account->id,
             'store_id' => $storeIdTo,
+            'client_id' => $clientId,
             'document_type' => $documentType,
             'document_id' => $documentId,
             'entry_date' => $entryDate,
@@ -113,7 +119,8 @@ class LedgerService
         ?int $storeId = null,
         ?string $documentType = null,
         ?int $documentId = null,
-        ?string $comment = null
+        ?string $comment = null,
+        ?int $clientId = null
     ): void {
         $account = Account::findByCode($accountCode);
         if (! $account || ($debit <= 0 && $credit <= 0)) {
@@ -123,6 +130,7 @@ class LedgerService
         LedgerEntry::create([
             'account_id' => $account->id,
             'store_id' => $storeId,
+            'client_id' => $clientId,
             'document_type' => $documentType,
             'document_id' => $documentId,
             'entry_date' => $entryDate,

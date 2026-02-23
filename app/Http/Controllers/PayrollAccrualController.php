@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\DocumentLedgerTemplate;
 use App\Models\Employee;
+use App\Models\LedgerEntry;
 use App\Models\PayrollAccrual;
 use App\Models\PayrollAccrualItem;
 use App\Services\LedgerService;
@@ -89,6 +91,18 @@ class PayrollAccrualController extends Controller
     public function show(PayrollAccrual $payrollAccrual)
     {
         $payrollAccrual->load(['items.employee', 'createdByUser']);
-        return view('payroll-accruals.show', compact('payrollAccrual'));
+
+        $ledgerEntries = LedgerEntry::where('document_type', 'payroll_accrual')
+            ->where('document_id', $payrollAccrual->id)
+            ->with('account')
+            ->orderBy('id')
+            ->get();
+        $templates = DocumentLedgerTemplate::forDocumentType('payroll_accrual');
+        $documentType = 'payroll_accrual';
+        $documentId = $payrollAccrual->id;
+
+        return view('payroll-accruals.show', compact(
+            'payrollAccrual', 'ledgerEntries', 'templates', 'documentType', 'documentId'
+        ));
     }
 }

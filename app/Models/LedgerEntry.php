@@ -11,6 +11,7 @@ class LedgerEntry extends Model
     protected $fillable = [
         'account_id',
         'store_id',
+        'client_id',
         'document_type',
         'document_id',
         'entry_date',
@@ -37,6 +38,11 @@ class LedgerEntry extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
     }
 
     public function createdByUser(): BelongsTo

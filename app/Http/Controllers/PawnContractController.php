@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Models\CashDocument;
 use App\Models\CashOperationType;
+use App\Models\DocumentLedgerTemplate;
 use App\Models\ItemStatus;
+use App\Models\LedgerEntry;
 use App\Models\PawnContract;
 use App\Services\LedgerService;
 use Illuminate\Http\Request;
@@ -41,7 +43,18 @@ class PawnContractController extends Controller
         }
         $pawnContract->load(['client', 'item.status', 'store', 'appraiser', 'redeemedByUser']);
 
-        return view('pawn-contracts.show', compact('pawnContract'));
+        $ledgerEntries = LedgerEntry::where('document_type', 'pawn_contract')
+            ->where('document_id', $pawnContract->id)
+            ->with('account')
+            ->orderBy('id')
+            ->get();
+        $templates = DocumentLedgerTemplate::forDocumentType('pawn_contract');
+        $documentType = 'pawn_contract';
+        $documentId = $pawnContract->id;
+
+        return view('pawn-contracts.show', compact(
+            'pawnContract', 'ledgerEntries', 'templates', 'documentType', 'documentId'
+        ));
     }
 
     /** Печатная форма договора залога. */
@@ -100,6 +113,7 @@ class PawnContractController extends Controller
         $docType = $cashDoc ? 'cash_document' : 'pawn_contract';
         $docId = $cashDoc ? $cashDoc->id : $pawnContract->id;
 
+        $clientId = $pawnContract->client_id;
         if ($cashDoc && $loanAmount > 0) {
             $ledger->post(
                 Account::CODE_CASH,
@@ -109,7 +123,8 @@ class PawnContractController extends Controller
                 $pawnContract->store_id,
                 $docType,
                 $docId,
-                'Возврат основного долга по договору №' . $pawnContract->contract_number
+                'Возврат основного долга по договору №' . $pawnContract->contract_number,
+                $clientId
             );
         }
         if ($cashDoc && $interestAmount > 0) {
@@ -121,7 +136,8 @@ class PawnContractController extends Controller
                 $pawnContract->store_id,
                 $docType,
                 $docId,
-                'Проценты по договору залога №' . $pawnContract->contract_number
+                'Проценты по договору залога №' . $pawnContract->contract_number,
+                $clientId
             );
         }
         if ($loanAmount > 0) {
@@ -133,7 +149,8 @@ class PawnContractController extends Controller
                 $pawnContract->store_id,
                 'pawn_contract',
                 $pawnContract->id,
-                'Возврат товара из залога №' . $pawnContract->contract_number
+                'Возврат товара из залога №' . $pawnContract->contract_number,
+                $clientId
             );
         }
 

@@ -7,7 +7,7 @@
 
 <div class="mb-3">
     <a href="{{ route('chart-of-accounts.index') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> План счетов</a>
-    <a href="{{ route('chart-of-accounts.turnover-balance') }}" class="btn btn-outline-primary">Оборотно-сальдовая ведомость</a>
+    <a href="{{ route('chart-of-accounts.turnover-balance', ['date_from' => $dateFrom, 'date_to' => $dateTo, 'store_id' => $storeId, 'client_id' => $clientId]) }}" class="btn btn-outline-primary">Оборотно-сальдовая ведомость</a>
 </div>
 
 <form method="get" class="row g-3 mb-4">
@@ -30,6 +30,15 @@
         </select>
     </div>
     @endif
+    <div class="col-auto">
+        <label class="form-label">Клиент</label>
+        <select name="client_id" class="form-select form-select-sm" style="width:auto; max-width:220px" onchange="this.form.submit()">
+            <option value="">Все</option>
+            @foreach($clients as $c)
+                <option value="{{ $c->id }}" {{ $clientId == $c->id ? 'selected' : '' }}>{{ $c->last_name }} {{ $c->first_name }}</option>
+            @endforeach
+        </select>
+    </div>
 </form>
 
 <div class="card mb-4">
@@ -69,6 +78,7 @@
                         <th>Дата</th>
                         <th>Документ</th>
                         <th>Магазин</th>
+                        <th>Клиент</th>
                         <th class="text-end">Дебет</th>
                         <th class="text-end">Кредит</th>
                         <th>Комментарий</th>
@@ -86,12 +96,13 @@
                             @endif
                         </td>
                         <td>{{ $e->store?->name ?? '—' }}</td>
+                        <td>{{ $e->client ? $e->client->last_name . ' ' . $e->client->first_name : '—' }}</td>
                         <td class="text-end">{{ $e->debit > 0 ? number_format($e->debit, 2, ',', ' ') : '—' }}</td>
                         <td class="text-end">{{ $e->credit > 0 ? number_format($e->credit, 2, ',', ' ') : '—' }}</td>
                         <td class="small text-muted">{{ Str::limit($e->comment, 50) }}</td>
                     </tr>
                     @empty
-                    <tr><td colspan="6" class="text-muted text-center py-4">Нет движений за выбранный период.</td></tr>
+                    <tr><td colspan="7" class="text-muted text-center py-4">Нет движений за выбранный период.</td></tr>
                     @endforelse
                 </tbody>
             </table>

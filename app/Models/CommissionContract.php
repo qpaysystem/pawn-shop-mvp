@@ -10,6 +10,13 @@ class CommissionContract extends Model
 {
     use HasFactory;
 
+    protected static function booted(): void
+    {
+        static::deleting(function (CommissionContract $doc) {
+            LedgerEntry::where('document_type', 'commission_contract')->where('document_id', $doc->id)->delete();
+        });
+    }
+
     protected $fillable = [
         'contract_number', 'client_id', 'item_id', 'appraiser_id', 'store_id',
         'commission_percent', 'commission_amount', 'seller_price', 'client_price',
