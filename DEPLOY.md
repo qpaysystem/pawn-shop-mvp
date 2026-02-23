@@ -428,6 +428,14 @@ git pull origin main
 
 После успешного `git pull` ошибка *Another route has already been assigned name [clients.store]* при `route:cache` обычно исчезает (она возникала из-за старой версии кода на сервере).
 
+**Если при запуске `./deploy.sh` или `php` появляется ошибка *No such file or directory* (например `/opt/php56/bin/php`):**  
+На хостинге в PATH может быть указан старый или несуществующий PHP. Запустите деплой с явным путём к PHP:
+```bash
+export PHP=/usr/bin/php
+./deploy.sh
+```
+Либо выполните команды вручную, подставляя `/usr/bin/php` вместо `php` (см. вариант Б выше). В `deploy.sh` добавлен авто-поиск рабочего PHP (`/usr/bin/php`, `/usr/local/bin/php`), поэтому после обновления кода скрипт сам подхватит нужный интерпретатор.
+
 ---
 
 ## Другой хостинг (не Timeweb)
@@ -452,3 +460,34 @@ git pull origin main
 - И другие по необходимости (см. `.env.example`).
 
 Без них приложение работает; дополнительные функции просто будут недоступны.
+
+### Распознавание паспорта на боевом сервере
+
+Если распознавание паспорта по фото не работает на боевом, проверьте по шагам:
+
+1. **Ключи в `.env` на сервере**  
+   Должен быть указан хотя бы один из:
+   - `DEEPSEEK_API_KEY` (рекомендуется: один запрос — и текст, и разбор полей),
+   - `GEMINI_API_KEY` (бесплатный tier: https://aistudio.google.com/apikey),
+   - `GOOGLE_VISION_API_KEY` (Google Cloud Console → Vision API).
+
+2. **Сброс кэша конфигурации**  
+   После добавления или изменения этих ключей в `.env` на сервере обязательно выполните:
+   ```bash
+   php artisan config:clear
+   ```
+   или заново соберите кэш:
+   ```bash
+   php artisan config:cache
+   ```
+   Иначе приложение продолжит использовать старые (пустые) значения из кэша.
+
+3. **Доступ в интернет с сервера**  
+   Проверьте, что с хостинга разрешены исходящие HTTPS-запросы (например, к `api.deepseek.com`, `generativelanguage.googleapis.com`, `vision.googleapis.com`). В SSH:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" https://api.deepseek.com
+   ```
+   Код 200 или 4xx означает, что соединение есть; ошибки вида «Connection refused» или таймаут — ограничения хостинга или файрвола.
+
+4. **Логи**  
+   Точную причину смотрите в `storage/logs/laravel.log` на сервере (сообщение «Passport OCR error»).

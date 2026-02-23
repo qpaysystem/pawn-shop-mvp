@@ -431,7 +431,7 @@ class AcceptItemController extends Controller
 
         if (($deepseekKey === '' || $deepseekKey === null) && ($geminiKey === '' || $geminiKey === null) && ($visionKey === '' || $visionKey === null)) {
             return response()->json([
-                'error' => 'Укажите DEEPSEEK_API_KEY, GEMINI_API_KEY или GOOGLE_VISION_API_KEY в .env',
+                'error' => 'Укажите DEEPSEEK_API_KEY, GEMINI_API_KEY или GOOGLE_VISION_API_KEY в .env. На боевом после изменения .env выполните: php artisan config:clear',
                 'passport_data' => '',
             ], 422);
         }
@@ -486,8 +486,16 @@ class AcceptItemController extends Controller
                 'llm_error' => $llmError,
             ]);
         } catch (\Throwable $e) {
+            \Log::warning('Passport OCR error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $msg = $e->getMessage();
+            if (str_contains($msg, 'Connection') || str_contains($msg, 'cURL') || str_contains($msg, 'SSL') || str_contains($msg, 'timed out')) {
+                $msg = 'Нет доступа к сервису распознавания с сервера (сеть или SSL). Проверьте исходящие запросы и при необходимости выполните на сервере: php artisan config:clear';
+            }
             return response()->json([
-                'error' => $e->getMessage(),
+                'error' => $msg,
                 'passport_data' => '',
             ], 422);
         }

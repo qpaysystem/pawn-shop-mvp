@@ -7,6 +7,7 @@
 
 <div class="card mb-4">
     <div class="card-body">
+        <div class="table-responsive">
         <table class="table table-hover mb-0">
             <thead>
                 <tr>
@@ -33,6 +34,7 @@
                 </tr>
             </tfoot>
         </table>
+        </div>
     </div>
 </div>
 <a href="{{ route('cash.index') }}" class="btn btn-outline-primary">← К списку операций</a>

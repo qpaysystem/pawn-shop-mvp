@@ -123,11 +123,108 @@
         }
         .app-main .alert-success { border-left: 4px solid #198754; }
         .app-main .alert-danger { border-left: 4px solid #dc3545; }
+
+        /* ——— Мобильная верстка ——— */
+        .app-mobile-header {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: var(--lombard-primary);
+            color: #fff;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1rem;
+            z-index: 1030;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .app-mobile-header .navbar-brand { color: #fff; font-size: 1.1rem; margin: 0; }
+        .app-mobile-header .btn-menu {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: rgba(255,255,255,0.9);
+            border-radius: 8px;
+            font-size: 1.5rem;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .app-mobile-header .btn-menu:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .app-sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1025;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        body.sidebar-open .app-sidebar-overlay { opacity: 1; }
+
+        @media (max-width: 991.98px) {
+            .app-mobile-header { display: flex; padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); padding-top: env(safe-area-inset-top); }
+            .app-sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 280px;
+                max-width: 85vw;
+                height: 100vh;
+                height: 100dvh;
+                z-index: 1030;
+                transform: translateX(-100%);
+                transition: transform 0.25s ease-out;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+                padding-top: env(safe-area-inset-top);
+            }
+            body.sidebar-open .app-sidebar { transform: translateX(0); }
+            .app-sidebar-overlay { display: block; pointer-events: none; }
+            body.sidebar-open .app-sidebar-overlay { pointer-events: auto; }
+            .app-main {
+                padding-top: calc(56px + env(safe-area-inset-top) + 1rem);
+                padding-left: max(1rem, env(safe-area-inset-left));
+                padding-right: max(1rem, env(safe-area-inset-right));
+                padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+                min-height: 100vh;
+                min-height: 100dvh;
+                width: 100%;
+            }
+            .app-main .btn { min-height: 44px; padding: 0.5rem 1rem; }
+            .app-main .form-control, .app-main .form-select {
+                min-height: 44px;
+                font-size: 16px; /* уменьшает зум iOS при фокусе */
+            }
+            .app-main .nav-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+            .app-main .nav-tabs .nav-link { white-space: nowrap; padding: 0.6rem 0.75rem; }
+            .app-main .table-responsive { -webkit-overflow-scrolling: touch; }
+            .app-main .table { font-size: 0.9rem; }
+        }
+
+        @media (max-width: 575.98px) {
+            .app-main .row.g-3 > [class*="col-"] { margin-bottom: 0.5rem; }
+            .app-main .d-flex.justify-content-between, .app-main .d-flex.justify-content-end { flex-wrap: wrap; gap: 0.5rem; }
+            .app-main .btn-group .btn { min-height: 44px; }
+        }
     </style>
     @stack('styles')
 </head>
 <body class="d-flex">
-    <nav class="navbar navbar-dark flex-column align-items-stretch p-3 app-sidebar">
+    <header class="app-mobile-header">
+        <button type="button" class="btn-menu" id="sidebar-toggle" aria-label="Меню"><i class="bi bi-list"></i></button>
+        <a class="navbar-brand" href="{{ route('dashboard') }}">{{ config('services.lombard.name', 'Ломбард') }}</a>
+        <a class="btn-menu" href="{{ route('home') }}" target="_blank" aria-label="На сайт"><i class="bi bi-box-arrow-up-right"></i></a>
+    </header>
+    <div class="app-sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+    <nav class="navbar navbar-dark flex-column align-items-stretch p-3 app-sidebar" id="app-sidebar">
         <a class="navbar-brand mb-3" href="{{ route('dashboard') }}">{{ config('services.lombard.name', 'Ломбард') }}</a>
         <a class="nav-link text-white-50 small mb-2" href="{{ route('home') }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> На сайт</a>
         <ul class="nav flex-column">
@@ -234,6 +331,27 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
           } catch (e) {}
         }
+      })();
+      (function () {
+        var btn = document.getElementById('sidebar-toggle');
+        var overlay = document.getElementById('sidebar-overlay');
+        function open() {
+          document.body.classList.add('sidebar-open');
+          if (overlay) overlay.setAttribute('aria-hidden', 'false');
+        }
+        function close() {
+          document.body.classList.remove('sidebar-open');
+          if (overlay) overlay.setAttribute('aria-hidden', 'true');
+        }
+        function toggle() {
+          document.body.classList.toggle('sidebar-open');
+          if (overlay) overlay.setAttribute('aria-hidden', document.body.classList.contains('sidebar-open') ? 'false' : 'true');
+        }
+        if (btn) btn.addEventListener('click', toggle);
+        if (overlay) overlay.addEventListener('click', close);
+        document.getElementById('app-sidebar').querySelectorAll('.nav-link').forEach(function (a) {
+          a.addEventListener('click', close);
+        });
       })();
     </script>
     @stack('scripts')

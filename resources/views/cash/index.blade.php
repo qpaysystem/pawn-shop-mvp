@@ -6,7 +6,7 @@
 <h1 class="h4 mb-4">Кассовые операции</h1>
 
 @if(auth()->user()->canProcessSales())
-<div class="mb-3">
+<div class="mb-3 d-flex flex-wrap gap-2">
     <a href="{{ route('cash.create', $store ? ['store_id' => $store->id] : []) }}" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Новый приход / расход</a>
     <a href="{{ route('cash.report') }}" class="btn btn-outline-primary"><i class="bi bi-bar-chart"></i> Отчёт по кассам</a>
 </div>
@@ -16,41 +16,41 @@
     <p class="text-muted">Нет доступных магазинов.</p>
 @else
 <form method="get" class="row g-3 mb-4">
-    <div class="col-auto">
+    <div class="col-12 col-md-auto">
         <label class="form-label">Магазин</label>
-        <select name="store_id" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+        <select name="store_id" class="form-select form-select-sm" onchange="this.form.submit()">
             @foreach($stores as $s)
                 <option value="{{ $s->id }}" {{ ($store && $store->id == $s->id) ? 'selected' : '' }}>{{ $s->name }}</option>
             @endforeach
         </select>
     </div>
-    <div class="col-auto">
+    <div class="col-12 col-md-auto">
         <label class="form-label">Клиент</label>
-        <select name="client_id" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+        <select name="client_id" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">Все</option>
             @foreach(\App\Models\Client::orderBy('full_name')->get(['id','full_name']) as $c)
                 <option value="{{ $c->id }}" {{ request('client_id') == $c->id ? 'selected' : '' }}>{{ $c->full_name }}</option>
             @endforeach
         </select>
     </div>
-    <div class="col-auto">
+    <div class="col-12 col-md-auto">
         <label class="form-label">Тип</label>
-        <select name="direction" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+        <select name="direction" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">Все</option>
             <option value="income" {{ request('direction') === 'income' ? 'selected' : '' }}>Приход</option>
             <option value="expense" {{ request('direction') === 'expense' ? 'selected' : '' }}>Расход</option>
         </select>
     </div>
-    <div class="col-auto">
+    <div class="col-12 col-md-auto">
         <label class="form-label">Дата с</label>
-        <input type="date" name="date_from" class="form-control form-control-sm" style="width:auto" value="{{ request('date_from') }}" onchange="this.form.submit()">
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request('date_from') }}" onchange="this.form.submit()">
     </div>
-    <div class="col-auto">
+    <div class="col-12 col-md-auto">
         <label class="form-label">Дата по</label>
-        <input type="date" name="date_to" class="form-control form-control-sm" style="width:auto" value="{{ request('date_to') }}" onchange="this.form.submit()">
+        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request('date_to') }}" onchange="this.form.submit()">
     </div>
     @if(request()->hasAny(['direction','date_from','date_to','client_id']))
-    <div class="col-auto align-self-end">
+    <div class="col-12 col-md-auto align-self-end">
         <a href="{{ route('cash.index', ['store_id' => $store?->id]) }}" class="btn btn-sm btn-outline-secondary">Сбросить</a>
     </div>
     @endif
@@ -72,7 +72,8 @@
 </div>
 @endif
 
-<table class="table table-hover">
+<div class="table-responsive">
+<table class="table table-hover mb-0">
     <thead>
         <tr>
             <th>Дата</th>
@@ -126,6 +127,7 @@
         @endforelse
     </tbody>
 </table>
+</div>
 {{ $documents->links() }}
 @endif
 @endsection
