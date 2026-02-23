@@ -2,9 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Оценщик">
     <title>@yield('title', 'Дашборд') — {{ config('services.lombard.name', config('app.name')) }}</title>
+    <link rel="manifest" href="{{ asset('manifest-appraiser.json') }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/pwa-icon-192.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -227,6 +232,7 @@
     <nav class="navbar navbar-dark flex-column align-items-stretch p-3 app-sidebar" id="app-sidebar">
         <a class="navbar-brand mb-3" href="{{ route('dashboard') }}">{{ config('services.lombard.name', 'Ломбард') }}</a>
         <a class="nav-link text-white-50 small mb-2" href="{{ route('home') }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> На сайт</a>
+        <a class="nav-link mb-2 py-2 rounded bg-white bg-opacity-10 text-white" href="{{ route('appraiser.home') }}"><i class="bi bi-phone"></i> Оценщик</a>
         <ul class="nav flex-column">
             <li>
                 <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-clients" aria-expanded="true" aria-controls="sidebar-group-clients"><i class="bi bi-people-fill nav-group-toggle-icon"></i><span>Работа с клиентами</span><i class="bi bi-chevron-down"></i></button>

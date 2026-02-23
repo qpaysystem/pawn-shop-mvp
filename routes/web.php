@@ -88,6 +88,9 @@ Route::post('logout', [LoginController::class, 'logout'])->name('logout')->middl
 
 Route::middleware('auth')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('appraiser', function () {
+        return view('appraiser.home');
+    })->name('appraiser.home');
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
 
     // Приём товара (оценщик, менеджер, super-admin) — более специфичные маршруты выше

@@ -593,6 +593,17 @@
         visitPurposeSelect.addEventListener('change', syncVisitPurpose);
         document.getElementById('accept-form').addEventListener('submit', syncVisitPurpose);
         syncVisitPurpose();
+        // Открыть вкладку «Выкуп» при переходе с ?purpose=redemption (приложение оценщика)
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('purpose') === 'redemption') {
+            visitPurposeSelect.value = 'redemption';
+            syncVisitPurpose();
+            var tabRedemption = document.getElementById('tab-redemption');
+            if (tabRedemption && typeof bootstrap !== 'undefined') {
+                var tabInstance = bootstrap.Tab.getOrCreateInstance(tabRedemption);
+                tabInstance.show();
+            }
+        }
     }
 
     // Поиск для оформления выкупа (ФИО, телефон, номер договора)
