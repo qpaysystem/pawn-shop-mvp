@@ -54,6 +54,12 @@ class User extends Authenticatable
         return $this->role === self::ROLE_SUPER_ADMIN;
     }
 
+    /** Оценщик / товаровед — упрощённый интерфейс (только приём, выкуп, касса). */
+    public function isAppraiser(): bool
+    {
+        return $this->role === self::ROLE_APPRAISER;
+    }
+
     /** Полный доступ к своему магазину (manager или super-admin). */
     public function hasFullStoreAccess(): bool
     {

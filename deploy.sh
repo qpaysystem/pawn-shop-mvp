@@ -44,6 +44,7 @@ $PHP artisan migrate --force
 echo "4. Кэш конфигурации и маршрутов..."
 $PHP artisan config:cache
 $PHP artisan route:cache
+$PHP artisan view:clear
 $PHP artisan view:cache
 
 echo "5. Симлинк storage (если ещё нет)..."

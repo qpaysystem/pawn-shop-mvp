@@ -269,7 +269,10 @@
     @stack('styles')
 </head>
 <body class="d-flex">
-    @if(auth()->user() && auth()->user()->role === 'appraiser')
+    @php
+        $isAppraiser = $is_appraiser ?? (auth()->check() && auth()->user()->role === 'appraiser');
+    @endphp
+    @if($isAppraiser)
     <header class="appraiser-only-header">
         <a href="{{ route('appraiser.home') }}" class="brand">Оценщик</a>
         <form method="post" action="{{ route('logout') }}" class="d-inline">
