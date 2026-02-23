@@ -19,9 +19,10 @@
             --lombard-accent-hover: #fdd880;
         }
         body { font-family: Montserrat, sans-serif; }
-        /* Сайдбар в стиле лендинга */
+        /* Сайдбар в стиле лендинга: шире, чтобы названия разделов в один ряд + иконки */
         .app-sidebar {
-            width: 220px;
+            width: 280px;
+            min-width: 280px;
             min-height: 100vh;
             background-color: var(--lombard-primary);
         }
@@ -36,9 +37,10 @@
             padding: 0.5rem 0.75rem;
             border-radius: 6px;
             transition: color 0.2s, background 0.2s;
+            white-space: nowrap;
         }
         .app-sidebar .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
-        .app-sidebar .nav-link i { opacity: 0.9; margin-right: 0.35rem; }
+        .app-sidebar .nav-link i { opacity: 0.9; margin-right: 0.5rem; flex-shrink: 0; }
         .app-sidebar .nav-group-toggle {
             font-size: 0.7rem;
             font-weight: 600;
@@ -57,10 +59,12 @@
             align-items: center;
             justify-content: space-between;
             transition: color 0.2s, background 0.2s;
+            white-space: nowrap;
         }
         .app-sidebar .nav-group-toggle:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .app-sidebar .nav-group-toggle:first-of-type { margin-top: 0; }
-        .app-sidebar .nav-group-toggle .bi-chevron-down { transition: transform 0.2s; }
+        .app-sidebar .nav-group-toggle .nav-group-toggle-icon { margin-right: 0.5rem; opacity: 0.85; flex-shrink: 0; }
+        .app-sidebar .nav-group-toggle .bi-chevron-down { transition: transform 0.2s; flex-shrink: 0; }
         .app-sidebar .nav-group-toggle[aria-expanded="false"] .bi-chevron-down { transform: rotate(-90deg); }
         .app-sidebar .nav-group-items { padding-left: 0; list-style: none; }
         .app-sidebar .nav-group-items .nav-item { margin-bottom: 0; }
@@ -128,7 +132,7 @@
         <a class="nav-link text-white-50 small mb-2" href="{{ route('home') }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> На сайт</a>
         <ul class="nav flex-column">
             <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-clients" aria-expanded="true" aria-controls="sidebar-group-clients"><span>Работа с клиентами</span><i class="bi bi-chevron-down"></i></button>
+                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-clients" aria-expanded="true" aria-controls="sidebar-group-clients"><i class="bi bi-people-fill nav-group-toggle-icon"></i><span>Работа с клиентами</span><i class="bi bi-chevron-down"></i></button>
                 <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-clients">
                     <li class="nav-item"><a class="nav-link" href="{{ route('dashboard') }}"><i class="bi bi-grid"></i> Дашборд</a></li>
                     @auth
@@ -146,7 +150,7 @@
             </li>
 
             <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-finance" aria-expanded="true" aria-controls="sidebar-group-finance"><span>Финансы</span><i class="bi bi-chevron-down"></i></button>
+                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-finance" aria-expanded="true" aria-controls="sidebar-group-finance"><i class="bi bi-wallet2 nav-group-toggle-icon"></i><span>Финансы</span><i class="bi bi-chevron-down"></i></button>
                 <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-finance">
                     @if(auth()->user() && auth()->user()->canProcessSales())
                     <li class="nav-item"><a class="nav-link" href="{{ route('cash.index') }}"><i class="bi bi-cash-stack"></i> Касса</a></li>
@@ -162,7 +166,7 @@
             </li>
 
             <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-settings" aria-expanded="true" aria-controls="sidebar-group-settings"><span>Настройки</span><i class="bi bi-chevron-down"></i></button>
+                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-settings" aria-expanded="true" aria-controls="sidebar-group-settings"><i class="bi bi-gear nav-group-toggle-icon"></i><span>Настройки</span><i class="bi bi-chevron-down"></i></button>
                 <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-settings">
                     <li class="nav-item"><a class="nav-link" href="{{ route('item-categories.index') }}"><i class="bi bi-tags"></i> Категории</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ route('brands.index') }}"><i class="bi bi-award"></i> Бренды</a></li>

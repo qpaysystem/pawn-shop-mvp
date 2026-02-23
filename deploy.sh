@@ -14,7 +14,7 @@ else
 fi
 
 echo "1. Обновление кода (git pull)..."
-git pull --no-edit || true
+git pull origin main --no-edit || true
 
 echo "2. Установка зависимостей (без dev)..."
 $COMPOSER install --no-dev --optimize-autoloader --no-interaction

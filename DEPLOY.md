@@ -407,6 +407,27 @@ Host github.com
 
 **Важно:** после `git pull` не перезаписывайте `.env` из репозитория — на сервере должны оставаться свои `APP_KEY`, `DB_*`, `LOG_CHANNEL` и т.д. Если в репозитории есть `.env.example`, используйте его только как образец.
 
+**Если на сервере `git pull` ругается на local changes или untracked files:**
+
+Такое бывает, если на сервере менялся лог, кэш или появилась лишняя миграция. Разблокировать обновление можно так (по SSH):
+
+```bash
+cd ~/pawn-shop-mvp
+# Удалить кэш Laravel (в репо эти файлы больше не хранятся — они мешают pull)
+rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
+# Сбросить лог, чтобы pull не ругался (файл пересоздастся при работе сайта)
+git checkout -- storage/logs/laravel.log 2>/dev/null || true
+# Убрать мешающий untracked-файл миграции, если он совпадает с версией из репо
+rm -f database/migrations/2025_02_11_100002_add_role_and_store_to_users_table.php
+# При необходимости задать ветку по умолчанию (один раз)
+git branch --set-upstream-to=origin/main main
+# Теперь подтянуть код и задеплоить
+git pull origin main
+./deploy.sh
+```
+
+После успешного `git pull` ошибка *Another route has already been assigned name [clients.store]* при `route:cache` обычно исчезает (она возникала из-за старой версии кода на сервере).
+
 ---
 
 ## Другой хостинг (не Timeweb)
