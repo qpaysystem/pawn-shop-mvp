@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.appraiser')
 
 @section('title', 'Оценщик')
 
