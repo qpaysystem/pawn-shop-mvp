@@ -91,7 +91,7 @@ class DocumentController extends Controller
                     'number' => $doc->document_number ?? '№' . $doc->id,
                     'date' => $doc->document_date,
                     'amount' => $doc->amount,
-                    'url' => route('cash.index', ['date_from' => \Carbon\Carbon::parse($doc->document_date)->format('Y-m-d'), 'date_to' => \Carbon\Carbon::parse($doc->document_date)->format('Y-m-d')]),
+                    'url' => route('cash.show', $doc),
                 ]);
             }
         }
