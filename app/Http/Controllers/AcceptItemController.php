@@ -315,9 +315,9 @@ class AcceptItemController extends Controller
                 $this->createClientVisitForPurchase($storeId, $client->id, $visitPurpose, $contract->id);
                 $ledger = app(LedgerService::class);
                 $ledger->post(Account::CODE_GOODS, Account::CODE_CASH, $purchaseAmount, \Carbon\Carbon::parse($purchaseDate), $storeId, 'purchase_contract', $contract->id, 'Договор скупки №' . $contract->contract_number, $contract->client_id);
-                // Проводки по кассовому документу «Оплата продавцу» (Дт 76 Кт 50) — отображаются во вкладке «Бухгалтерские проводки» карточки кассового документа
+                // Проводки по кассовому документу «Оплата продавцу»: Дт 60 Кт 50
                 if ($cashDoc) {
-                    $ledger->post(Account::CODE_SETTLEMENTS_OTHER, Account::CODE_CASH, $purchaseAmount, \Carbon\Carbon::parse($purchaseDate), $storeId, 'cash_document', $cashDoc->id, $cashDoc->document_number . ' ' . ($cashDoc->comment ?? ''), $client->id);
+                    $ledger->post(Account::CODE_SUPPLIERS, Account::CODE_CASH, $purchaseAmount, \Carbon\Carbon::parse($purchaseDate), $storeId, 'cash_document', $cashDoc->id, $cashDoc->document_number . ' ' . ($cashDoc->comment ?? ''), $client->id);
                 }
 
                 return redirect()->route('purchase-contracts.print', $contract)->with('success', 'Договор скупки создан. Товар выкуплен.');

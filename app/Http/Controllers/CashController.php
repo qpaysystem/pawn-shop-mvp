@@ -141,7 +141,9 @@ class CashController extends Controller
         } elseif ($operationType->isIncome()) {
             $ledger->post(Account::CODE_CASH, Account::CODE_SETTLEMENTS_OTHER, $amount, $entryDate, (int) $validated['store_id'], 'cash_document', $doc->id, $comment, $clientId);
         } else {
-            $ledger->post(Account::CODE_SETTLEMENTS_OTHER, Account::CODE_CASH, $amount, $entryDate, (int) $validated['store_id'], 'cash_document', $doc->id, $comment, $clientId);
+            // Оплата продавцу: Дт 60 Кт 50; прочие расходы: Дт 76 Кт 50
+            $debitAccount = $operationType->name === 'Оплата продавцу' ? Account::CODE_SUPPLIERS : Account::CODE_SETTLEMENTS_OTHER;
+            $ledger->post($debitAccount, Account::CODE_CASH, $amount, $entryDate, (int) $validated['store_id'], 'cash_document', $doc->id, $comment, $clientId);
         }
 
         $label = $operationType->name === 'Перемещение между кассами'
@@ -248,7 +250,9 @@ class CashController extends Controller
         } elseif ($operationType->isIncome()) {
             $ledger->post(Account::CODE_CASH, Account::CODE_SETTLEMENTS_OTHER, $amount, $entryDate, (int) $validated['store_id'], 'cash_document', $cashDocument->id, $comment, $clientId);
         } else {
-            $ledger->post(Account::CODE_SETTLEMENTS_OTHER, Account::CODE_CASH, $amount, $entryDate, (int) $validated['store_id'], 'cash_document', $cashDocument->id, $comment, $clientId);
+            // Оплата продавцу: Дт 60 Кт 50; прочие расходы: Дт 76 Кт 50
+            $debitAccount = $operationType->name === 'Оплата продавцу' ? Account::CODE_SUPPLIERS : Account::CODE_SETTLEMENTS_OTHER;
+            $ledger->post($debitAccount, Account::CODE_CASH, $amount, $entryDate, (int) $validated['store_id'], 'cash_document', $cashDocument->id, $comment, $clientId);
         }
 
         return redirect()->route('cash.show', $cashDocument)->with('success', 'Документ сохранён. Проводки пересозданы.');
