@@ -16,6 +16,7 @@ class AccountsSeeder extends Seeder
             ['code' => '50', 'name' => 'Касса', 'description' => 'Наличные деньги (Касса торговли / Касса ломбарда)', 'type' => 'active', 'sort_order' => 20],
             ['code' => '51', 'name' => 'Расчетный счет', 'description' => 'Безналичные деньги', 'type' => 'active', 'sort_order' => 25],
             ['code' => '58', 'name' => 'Финансовые вложения', 'description' => 'Займы, выданные ломбардом (основной долг клиентам)', 'type' => 'active', 'sort_order' => 30],
+            ['code' => '60', 'name' => 'Расчёты с поставщиками', 'description' => 'Задолженность перед поставщиками (начисление расходов и т.п.)', 'type' => 'passive', 'sort_order' => 33],
             ['code' => '62', 'name' => 'Расчеты с покупателями', 'description' => 'Долги покупателей за товар (только торговля)', 'type' => 'passive', 'sort_order' => 35],
             ['code' => '66', 'name' => 'Расчеты по кредитам и займам', 'description' => 'Кредиты, полученные самой компанией (пассив)', 'type' => 'passive', 'sort_order' => 40],
             ['code' => '70', 'name' => 'Расчёты с персоналом по оплате труда', 'description' => 'Начисленная заработная плата сотрудникам', 'type' => 'passive', 'sort_order' => 41],
