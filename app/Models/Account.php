@@ -39,6 +39,9 @@ class Account extends Model
     /** 76 — Расчёты с разными дебиторами и кредиторами (в т.ч. обеспечение по залогу). */
     public const CODE_SETTLEMENTS_OTHER = '76';
 
+    /** 44 — Расходы на продажу (издержки обращения). */
+    public const CODE_SELLING_EXPENSES = '44';
+
     /** 90 — Продажи / прибыль. */
     public const CODE_SALES = '90';
 

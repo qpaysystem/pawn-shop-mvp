@@ -73,11 +73,12 @@ class ExpenseController extends Controller
         $docId = $expense->id;
         $clientId = $expense->client_id;
 
+        // Документ расхода — начисление за оказанные услуги (не кассовый). Формирует долг клиента и увеличение расходов на счёте 44.
         if ($clientId) {
-            // Привязка к клиенту: Дт 62 (долг клиента) Кт 50 — возникает дебиторская задолженность
+            // Дт 62 Кт 90 — дебиторская задолженность клиента (клиент должен нам), выручка от услуг
             $ledger->post(
                 Account::CODE_BUYERS,
-                Account::CODE_CASH,
+                Account::CODE_SALES,
                 $amount,
                 $entryDate,
                 $storeId,
@@ -86,13 +87,23 @@ class ExpenseController extends Controller
                 $comment,
                 $clientId
             );
-        } else {
-            // Без клиента: Дт счёт вида расхода Кт 50 (касса)
-            $debitAccount = $expense->expenseType->account;
-            $debitCode = $debitAccount ? $debitAccount->code : Account::CODE_OTHER_INCOME;
+            // Дт 44 Кт 76 — увеличение расходов на продажу (счёт 44)
             $ledger->post(
-                $debitCode,
-                Account::CODE_CASH,
+                Account::CODE_SELLING_EXPENSES,
+                Account::CODE_SETTLEMENTS_OTHER,
+                $amount,
+                $entryDate,
+                $storeId,
+                $docType,
+                $docId,
+                $comment,
+                null
+            );
+        } else {
+            // Без клиента: только начисление расхода на 44 — Дт 44 Кт 76
+            $ledger->post(
+                Account::CODE_SELLING_EXPENSES,
+                Account::CODE_SETTLEMENTS_OTHER,
                 $amount,
                 $entryDate,
                 $storeId,
