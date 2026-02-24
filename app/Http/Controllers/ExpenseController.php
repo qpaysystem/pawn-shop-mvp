@@ -10,6 +10,7 @@ use App\Models\ExpenseType;
 use App\Models\LedgerEntry;
 use App\Models\Store;
 use App\Services\LedgerService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 /** Документы начисления расходов. */
@@ -66,7 +67,7 @@ class ExpenseController extends Controller
         }
         $ledger = app(LedgerService::class);
         $amount = (float) $expense->amount;
-        $entryDate = $expense->expense_date;
+        $entryDate = Carbon::parse($expense->expense_date);
         $storeId = $expense->store_id;
         $docType = 'expense';
         $docId = $expense->id;
