@@ -12,6 +12,7 @@ use App\Http\Controllers\ChartOfAccountsController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommissionContractController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\DocumentLedgerEntryController;
 use App\Http\Controllers\DocumentLedgerTemplateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
@@ -146,6 +147,7 @@ Route::middleware('auth')->group(function () {
     Route::get('document-ledger-templates/create', [DocumentLedgerTemplateController::class, 'create'])->name('document-ledger-templates.create');
     Route::post('document-ledger-templates', [DocumentLedgerTemplateController::class, 'store'])->name('document-ledger-templates.store');
     Route::delete('document-ledger-templates/{documentLedgerTemplate}', [DocumentLedgerTemplateController::class, 'destroy'])->name('document-ledger-templates.destroy');
+    Route::post('document-ledger-entries', [DocumentLedgerEntryController::class, 'store'])->name('document-ledger-entries.store');
 
     // План счетов и отчётность
     Route::get('chart-of-accounts', [ChartOfAccountsController::class, 'index'])->name('chart-of-accounts.index');
