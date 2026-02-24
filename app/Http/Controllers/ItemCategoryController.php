@@ -28,7 +28,7 @@ class ItemCategoryController extends Controller
             'name' => 'required|string|max:255',
             'parent_id' => 'nullable|exists:item_categories,id',
             'evaluation_config' => 'nullable|array',
-            'evaluation_config.ai_prompt_suffix' => 'nullable|string|max:4000',
+            'evaluation_config.ai_prompt_suffix' => 'nullable|string|max:16000',
         ]);
         $config = null;
         $suffix = trim((string) ($data['evaluation_config']['ai_prompt_suffix'] ?? ''));
@@ -57,7 +57,7 @@ class ItemCategoryController extends Controller
             'name' => 'required|string|max:255',
             'parent_id' => 'nullable|exists:item_categories,id',
             'evaluation_config' => 'nullable|array',
-            'evaluation_config.ai_prompt_suffix' => 'nullable|string|max:4000',
+            'evaluation_config.ai_prompt_suffix' => 'nullable|string|max:16000',
         ]);
         $config = $itemCategory->evaluation_config ?? [];
         $suffix = trim((string) ($data['evaluation_config']['ai_prompt_suffix'] ?? ''));
