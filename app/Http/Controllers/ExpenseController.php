@@ -73,46 +73,18 @@ class ExpenseController extends Controller
         $docId = $expense->id;
         $clientId = $expense->client_id;
 
-        // Документ расхода — начисление за оказанные услуги (не кассовый). Формирует долг клиента и увеличение расходов на счёте 44.
-        if ($clientId) {
-            // Дт 62 Кт 90 — дебиторская задолженность клиента (клиент должен нам), выручка от услуг
-            $ledger->post(
-                Account::CODE_BUYERS,
-                Account::CODE_SALES,
-                $amount,
-                $entryDate,
-                $storeId,
-                $docType,
-                $docId,
-                $comment,
-                $clientId
-            );
-            // Дт 44 Кт 76 — увеличение расходов на продажу (счёт 44)
-            $ledger->post(
-                Account::CODE_SELLING_EXPENSES,
-                Account::CODE_SETTLEMENTS_OTHER,
-                $amount,
-                $entryDate,
-                $storeId,
-                $docType,
-                $docId,
-                $comment,
-                null
-            );
-        } else {
-            // Без клиента: только начисление расхода на 44 — Дт 44 Кт 76
-            $ledger->post(
-                Account::CODE_SELLING_EXPENSES,
-                Account::CODE_SETTLEMENTS_OTHER,
-                $amount,
-                $entryDate,
-                $storeId,
-                $docType,
-                $docId,
-                $comment,
-                null
-            );
-        }
+        // Начисление расхода: одна проводка Дт 60 Кт 44 (контрагент — выбранный клиент в client_id).
+        $ledger->post(
+            Account::CODE_SUPPLIERS,       // 60 — расчёты с поставщиками (дебет)
+            Account::CODE_SELLING_EXPENSES, // 44 — расходы на продажу (кредит)
+            $amount,
+            $entryDate,
+            $storeId,
+            $docType,
+            $docId,
+            $comment,
+            $clientId
+        );
         return redirect()->route('expenses.index')->with('success', 'Расход начислен.');
     }
 
