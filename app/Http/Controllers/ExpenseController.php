@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Account;
 use App\Models\DocumentLedgerTemplate;
 use App\Models\Expense;
 use App\Models\ExpenseType;
 use App\Models\LedgerEntry;
 use App\Models\Store;
+use App\Services\LedgerService;
 use Illuminate\Http\Request;
 
 /** Документы начисления расходов. */
@@ -46,7 +48,25 @@ class ExpenseController extends Controller
         $data['created_by'] = auth()->id();
         $last = Expense::orderBy('id', 'desc')->first();
         $data['number'] = 'РД-' . (($last ? $last->id + 1 : 1));
-        Expense::create($data);
+        $expense = Expense::create($data);
+        $expense->load('expenseType.account');
+        $debitAccount = $expense->expenseType->account;
+        $debitCode = $debitAccount ? $debitAccount->code : Account::CODE_OTHER_INCOME;
+        $comment = $expense->number . ': ' . ($expense->expenseType->name ?? '');
+        if ($expense->description) {
+            $comment .= ' — ' . \Illuminate\Support\Str::limit($expense->description, 100);
+        }
+        app(LedgerService::class)->post(
+            $debitCode,
+            Account::CODE_CASH,
+            (float) $expense->amount,
+            $expense->expense_date,
+            $expense->store_id,
+            'expense',
+            $expense->id,
+            $comment,
+            null
+        );
         return redirect()->route('expenses.index')->with('success', 'Расход начислен.');
     }
 
