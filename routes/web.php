@@ -148,6 +148,7 @@ Route::middleware('auth')->group(function () {
     Route::post('document-ledger-templates', [DocumentLedgerTemplateController::class, 'store'])->name('document-ledger-templates.store');
     Route::delete('document-ledger-templates/{documentLedgerTemplate}', [DocumentLedgerTemplateController::class, 'destroy'])->name('document-ledger-templates.destroy');
     Route::post('document-ledger-entries', [DocumentLedgerEntryController::class, 'store'])->name('document-ledger-entries.store');
+    Route::put('document-ledger-entries/{ledgerEntry}', [DocumentLedgerEntryController::class, 'update'])->name('document-ledger-entries.update');
 
     // План счетов и отчётность
     Route::get('chart-of-accounts', [ChartOfAccountsController::class, 'index'])->name('chart-of-accounts.index');

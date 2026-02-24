@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\CashDocument;
 use App\Models\CommissionContract;
 use App\Models\Expense;
+use App\Models\LedgerEntry;
 use App\Models\PawnContract;
 use App\Models\PayrollAccrual;
 use App\Models\PurchaseContract;
@@ -56,6 +57,32 @@ class DocumentLedgerEntryController extends Controller
 
         $redirectTo = $request->input('redirect_to', route('expenses.index'));
         return redirect()->to($redirectTo)->with('success', 'Проводка добавлена.');
+    }
+
+    /** Изменить счёт в проводке (отражается в ОСВ). */
+    public function update(Request $request, LedgerEntry $ledgerEntry): RedirectResponse
+    {
+        $validated = $request->validate([
+            'account_code' => 'required|string|max:20|exists:accounts,code',
+            'redirect_to' => 'nullable|string|max:2000',
+        ]);
+
+        $context = $this->resolveDocumentContext($ledgerEntry->document_type, (int) $ledgerEntry->document_id);
+        if ($context === null) {
+            return redirect()->to($request->input('redirect_to', url()->previous()))
+                ->withErrors(['account_code' => 'Нет доступа к документу или документ не найден.']);
+        }
+
+        $account = Account::findByCode($validated['account_code']);
+        if (! $account) {
+            return redirect()->to($request->input('redirect_to', url()->previous()))
+                ->withErrors(['account_code' => 'Счёт не найден.']);
+        }
+
+        $ledgerEntry->update(['account_id' => $account->id]);
+
+        $redirectTo = $request->input('redirect_to', url()->previous());
+        return redirect()->to($redirectTo)->with('success', 'Счёт в проводке изменён. Изменения отражены в ОСВ.');
     }
 
     /** Получить store_id и client_id по документу и проверить доступ. */

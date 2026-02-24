@@ -1,5 +1,6 @@
 {{-- Вкладка "Бухгалтерские проводки" для любого документа. Журнал операций: Содержание | Дебет | Кредит. Переменные: $documentType, $documentId, $ledgerEntries, $templates --}}
 @php
+    $accounts = \App\Models\Account::where('is_active', true)->orderBy('sort_order')->orderBy('code')->get();
     $debitEntries = $ledgerEntries->filter(fn ($e) => (float) $e->debit > 0);
     $creditEntries = $ledgerEntries->filter(fn ($e) => (float) $e->credit > 0);
     // Журнал операций: группируем проводки по (дата, комментарий) и собираем строки "Содержание | Дебет | Кредит"
@@ -51,6 +52,7 @@
                 </table>
             </div>
             <h6 class="mb-2">Детализация по дебету и кредиту</h6>
+            <p class="small text-muted mb-2">Счёт можно изменить — выберите другой из плана счетов и нажмите «Изменить». Изменения сразу отражаются в ОСВ.</p>
             <div class="row mb-4">
                 <div class="col-md-6">
                     <h6 class="text-success border-bottom border-success pb-2 mb-2">Дебет (ДТ) — операции по дебету</h6>
@@ -59,21 +61,35 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Дата</th>
-                                    <th>Счёт</th>
+                                    <th>Счёт (активный выбор)</th>
                                     <th class="text-end">Сумма</th>
                                     <th class="small">Комментарий</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($debitEntries as $e)
                                 <tr>
                                     <td>{{ $e->entry_date ? \Carbon\Carbon::parse($e->entry_date)->format('d.m.Y') : '—' }}</td>
-                                    <td>{{ $e->account ? $e->account->code . ' ' . $e->account->name : '—' }}</td>
+                                    <td>
+                                        <form method="post" action="{{ route('document-ledger-entries.update', $e) }}" class="d-inline-flex align-items-center gap-1 flex-wrap">
+                                            @csrf
+                                            @method('PUT')
+                                            <input type="hidden" name="redirect_to" value="{{ url()->current() }}#tab-ledger">
+                                            <select name="account_code" class="form-select form-select-sm" style="min-width:160px" required>
+                                                @foreach($accounts as $a)
+                                                    <option value="{{ $a->code }}" {{ $e->account_id == $a->id ? 'selected' : '' }}>{{ $a->code }} {{ $a->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">Изменить</button>
+                                        </form>
+                                    </td>
                                     <td class="text-end">{{ number_format($e->debit, 2, ',', ' ') }}</td>
                                     <td class="small">{{ Str::limit($e->comment, 40) }}</td>
+                                    <td></td>
                                 </tr>
                                 @empty
-                                <tr><td colspan="4" class="text-muted small">—</td></tr>
+                                <tr><td colspan="5" class="text-muted small">—</td></tr>
                                 @endforelse
                             </tbody>
                         </table>
@@ -86,21 +102,35 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Дата</th>
-                                    <th>Счёт</th>
+                                    <th>Счёт (активный выбор)</th>
                                     <th class="text-end">Сумма</th>
                                     <th class="small">Комментарий</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($creditEntries as $e)
                                 <tr>
                                     <td>{{ $e->entry_date ? \Carbon\Carbon::parse($e->entry_date)->format('d.m.Y') : '—' }}</td>
-                                    <td>{{ $e->account ? $e->account->code . ' ' . $e->account->name : '—' }}</td>
+                                    <td>
+                                        <form method="post" action="{{ route('document-ledger-entries.update', $e) }}" class="d-inline-flex align-items-center gap-1 flex-wrap">
+                                            @csrf
+                                            @method('PUT')
+                                            <input type="hidden" name="redirect_to" value="{{ url()->current() }}#tab-ledger">
+                                            <select name="account_code" class="form-select form-select-sm" style="min-width:160px" required>
+                                                @foreach($accounts as $a)
+                                                    <option value="{{ $a->code }}" {{ $e->account_id == $a->id ? 'selected' : '' }}>{{ $a->code }} {{ $a->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">Изменить</button>
+                                        </form>
+                                    </td>
                                     <td class="text-end">{{ number_format($e->credit, 2, ',', ' ') }}</td>
                                     <td class="small">{{ Str::limit($e->comment, 40) }}</td>
+                                    <td></td>
                                 </tr>
                                 @empty
-                                <tr><td colspan="4" class="text-muted small">—</td></tr>
+                                <tr><td colspan="5" class="text-muted small">—</td></tr>
                                 @endforelse
                             </tbody>
                         </table>
@@ -120,7 +150,6 @@
         @if($errors->any())
             <div class="alert alert-danger small py-2 mb-2">{{ $errors->first() }}</div>
         @endif
-        @php $accounts = \App\Models\Account::where('is_active', true)->orderBy('sort_order')->orderBy('code')->get(); @endphp
         <form method="post" action="{{ route('document-ledger-entries.store') }}" class="row g-2 align-items-end mb-4">
             @csrf
             <input type="hidden" name="document_type" value="{{ $documentType }}">
