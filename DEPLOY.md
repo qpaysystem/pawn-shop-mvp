@@ -249,6 +249,8 @@ chmod -R 775 storage bootstrap/cache
 
 Если видите ошибку 500 — проверьте права (шаг 14) и логи: на сервере `cat storage/logs/laravel.log` (последние строки).
 
+**Если 502 Bad Gateway (nginx):** обычно PHP-FPM упал или приложение выбросило необработанное исключение. По SSH: `tail -100 storage/logs/laravel.log` — в логе будет стек ошибки. Часто помогает: выполнить миграции (`php artisan migrate --force`), очистить кэш (`php artisan config:clear && php artisan view:clear`), перезапустить PHP-FPM (в панели хостинга или через службы).
+
 ---
 
 ## Краткая шпаргалка: только команды на сервере (после загрузки файлов)

@@ -23,7 +23,7 @@ class ChartOfAccountsController extends Controller
     {
         $storeIds = auth()->user()->allowedStoreIds();
         $stores = Store::whereIn('id', $storeIds)->where('is_active', true)->orderBy('name')->get();
-        $clients = Client::orderBy('last_name')->orderBy('first_name')->get();
+        $clients = Client::orderBy('full_name')->get();
 
         $dateFrom = $request->get('date_from', now()->startOfMonth()->format('Y-m-d'));
         $dateTo = $request->get('date_to', now()->format('Y-m-d'));
@@ -76,7 +76,7 @@ class ChartOfAccountsController extends Controller
     {
         $storeIds = auth()->user()->allowedStoreIds();
         $stores = Store::whereIn('id', $storeIds)->where('is_active', true)->orderBy('name')->get();
-        $clients = Client::orderBy('last_name')->orderBy('first_name')->get();
+        $clients = Client::orderBy('full_name')->get();
 
         $dateFrom = $request->get('date_from', now()->startOfMonth()->format('Y-m-d'));
         $dateTo = $request->get('date_to', now()->format('Y-m-d'));
