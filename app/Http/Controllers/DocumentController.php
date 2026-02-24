@@ -113,15 +113,17 @@ class DocumentController extends Controller
         }
 
         if (! $typeFilter || $typeFilter === 'expense') {
-            $exp = Expense::with('store')
-                ->whereIn('store_id', $storeIds)
+            $exp = Expense::with(['store', 'expenseType'])
+                ->where(function ($q) use ($storeIds) {
+                    $q->whereIn('store_id', $storeIds)->orWhereNull('store_id');
+                })
                 ->whereBetween('expense_date', [$dateFrom, $dateTo])
                 ->orderByDesc('expense_date')
                 ->get();
             foreach ($exp as $doc) {
                 $rows->push((object) [
                     'document_type' => 'expense',
-                    'type_label' => 'Расход',
+                    'type_label' => 'Начисление расхода',
                     'number' => $doc->number ?? '№' . $doc->id,
                     'date' => $doc->expense_date,
                     'amount' => $doc->amount,

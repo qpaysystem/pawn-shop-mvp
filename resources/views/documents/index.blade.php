@@ -23,7 +23,7 @@
             <option value="purchase_contract" {{ $typeFilter === 'purchase_contract' ? 'selected' : '' }}>Договоры скупки</option>
             <option value="cash_document" {{ $typeFilter === 'cash_document' ? 'selected' : '' }}>Кассовые документы</option>
             <option value="payroll_accrual" {{ $typeFilter === 'payroll_accrual' ? 'selected' : '' }}>Начисления ФОТ</option>
-            <option value="expense" {{ $typeFilter === 'expense' ? 'selected' : '' }}>Расходы</option>
+            <option value="expense" {{ $typeFilter === 'expense' ? 'selected' : '' }}>Начисления расходов</option>
         </select>
     </div>
 </form>

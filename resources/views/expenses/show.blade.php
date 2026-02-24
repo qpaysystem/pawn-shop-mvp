@@ -5,7 +5,14 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h4 mb-0">Расход {{ $expense->number }}</h1>
-    <a href="{{ route('expenses.index') }}" class="btn btn-outline-secondary">К списку</a>
+    <div class="d-flex gap-2">
+        <a href="{{ route('expenses.index') }}" class="btn btn-outline-secondary">К списку</a>
+        <form action="{{ route('expenses.destroy', $expense) }}" method="post" class="d-inline" onsubmit="return confirm('Удалить документ начисления расхода? Проводки в ОСВ по этому документу также будут удалены.');">
+            @csrf
+            @method('DELETE')
+            <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash"></i> Удалить</button>
+        </form>
+    </div>
 </div>
 
 <ul class="nav nav-tabs mb-3">

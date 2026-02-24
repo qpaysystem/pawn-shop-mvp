@@ -52,7 +52,14 @@
                     <td>{{ $e->store?->name ?? '—' }}</td>
                     <td>@if($e->client)<a href="{{ route('clients.show', $e->client) }}">{{ $e->client->full_name }}</a>@else —@endif</td>
                     <td>{{ number_format($e->amount, 2, ',', ' ') }} ₽</td>
-                    <td><a href="{{ route('expenses.show', $e) }}" class="btn btn-sm btn-outline-primary">Подробнее</a></td>
+                    <td class="d-flex gap-1 flex-wrap">
+                        <a href="{{ route('expenses.show', $e) }}" class="btn btn-sm btn-outline-primary">Подробнее</a>
+                        <form action="{{ route('expenses.destroy', $e) }}" method="post" class="d-inline" onsubmit="return confirm('Удалить документ {{ $e->number }}? Проводки в ОСВ будут удалены.');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
                 </tr>
                 @empty
                 <tr><td colspan="7" class="text-muted">Нет документов. <a href="{{ route('expenses.create') }}">Начислить расход</a></td></tr>

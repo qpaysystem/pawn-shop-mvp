@@ -136,4 +136,13 @@ class ExpenseController extends Controller
             'expense', 'ledgerEntries', 'templates', 'documentType', 'documentId'
         ));
     }
+
+    public function destroy(Expense $expense)
+    {
+        if ($expense->store_id && ! in_array($expense->store_id, auth()->user()->allowedStoreIds(), true)) {
+            abort(403);
+        }
+        $expense->delete();
+        return redirect()->route('expenses.index')->with('success', 'Документ расхода удалён. Проводки в ОСВ удалены.');
+    }
 }

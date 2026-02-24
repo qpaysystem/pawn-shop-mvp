@@ -158,6 +158,7 @@ Route::middleware('auth')->group(function () {
     Route::get('expenses/create', [ExpenseController::class, 'create'])->name('expenses.create');
     Route::post('expenses', [ExpenseController::class, 'store'])->name('expenses.store');
     Route::get('expenses/{expense}', [ExpenseController::class, 'show'])->name('expenses.show');
+    Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
 
     // ФОТ: сотрудники + документы начисления
     Route::resource('employees', EmployeeController::class);
