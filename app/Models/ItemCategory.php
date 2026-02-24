@@ -17,6 +17,14 @@ class ItemCategory extends Model
         return ['evaluation_config' => 'array'];
     }
 
+    /** При сохранении в БД массив всегда кодируется в JSON (избегаем "Array to string conversion"). */
+    public function setEvaluationConfigAttribute($value): void
+    {
+        $this->attributes['evaluation_config'] = $value === null || $value === ''
+            ? null
+            : (is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : $value);
+    }
+
     public function parent()
     {
         return $this->belongsTo(ItemCategory::class, 'parent_id');
