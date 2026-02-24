@@ -11,9 +11,16 @@
 </div>
 <div class="card mb-4">
     <div class="card-body">
+        <p><strong>Тип:</strong> @if($client->isLegal())<span class="badge bg-secondary">Юридическое лицо</span>@else<span class="badge bg-light text-dark">Физическое лицо</span>@endif</p>
+        @if($client->isLegal())
+            <p><strong>Наименование:</strong> {{ $client->legal_name }}</p>
+            @if($client->inn)<p><strong>ИНН:</strong> {{ $client->inn }}</p>@endif
+            @if($client->kpp)<p><strong>КПП:</strong> {{ $client->kpp }}</p>@endif
+            @if($client->legal_address)<p><strong>Юридический адрес:</strong> {{ $client->legal_address }}</p>@endif
+        @endif
         <p><strong>Телефон:</strong> {{ $client->phone }}</p>
         @if($client->email)<p><strong>Email:</strong> {{ $client->email }}</p>@endif
-        @if($client->passport_data)<p><strong>Паспорт:</strong> {{ $client->passport_data }}</p>@endif
+        @if(!$client->isLegal() && $client->passport_data)<p><strong>Паспорт:</strong> {{ $client->passport_data }}</p>@endif
         @if($client->notes)<p><strong>Заметки:</strong> {{ $client->notes }}</p>@endif
         @if($client->blacklist_flag)<p><span class="badge bg-danger">В чёрном списке</span></p>@endif
     </div>

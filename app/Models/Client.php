@@ -10,19 +10,34 @@ class Client extends Model
 {
     use HasFactory;
 
+    public const TYPE_INDIVIDUAL = 'individual';
+    public const TYPE_LEGAL = 'legal';
+
     protected $fillable = [
-        'full_name', 'last_name', 'first_name', 'patronymic',
+        'client_type', 'full_name', 'last_name', 'first_name', 'patronymic',
+        'legal_name', 'inn', 'kpp', 'legal_address',
         'phone', 'email', 'passport_data', 'notes', 'blacklist_flag',
         'lmb_data',
     ];
 
     public function getFullNameAttribute($value): string
     {
+        if (($this->attributes['client_type'] ?? '') === self::TYPE_LEGAL) {
+            $legal = trim((string) ($this->attributes['legal_name'] ?? ''));
+            if ($legal !== '') {
+                return $legal;
+            }
+        }
         $last = $this->attributes['last_name'] ?? '';
         $first = $this->attributes['first_name'] ?? '';
         $patr = $this->attributes['patronymic'] ?? '';
         $fromParts = trim(implode(' ', array_filter([$last, $first, $patr])));
         return $fromParts !== '' ? $fromParts : (string) ($value ?? '');
+    }
+
+    public function isLegal(): bool
+    {
+        return ($this->attributes['client_type'] ?? '') === self::TYPE_LEGAL;
     }
 
     protected function casts(): array

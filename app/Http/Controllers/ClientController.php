@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Services\LmbUserApiService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /** CRUD клиентов + страница клиента с историей сделок. */
 class ClientController extends Controller
@@ -17,7 +18,9 @@ class ClientController extends Controller
             $query->where(function ($qry) use ($q) {
                 $qry->where('full_name', 'like', "%{$q}%")
                     ->orWhere('phone', 'like', "%{$q}%")
-                    ->orWhere('email', 'like', "%{$q}%");
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('legal_name', 'like', "%{$q}%")
+                    ->orWhere('inn', 'like', "%{$q}%");
             });
         }
         if ($request->filled('blacklist')) {
@@ -55,18 +58,21 @@ class ClientController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'last_name' => 'required|string|max:100',
-            'first_name' => 'required|string|max:100',
+            'client_type' => ['required', Rule::in([Client::TYPE_INDIVIDUAL, Client::TYPE_LEGAL])],
+            'last_name' => [Rule::requiredIf($request->input('client_type') === Client::TYPE_INDIVIDUAL), 'nullable', 'string', 'max:100'],
+            'first_name' => [Rule::requiredIf($request->input('client_type') === Client::TYPE_INDIVIDUAL), 'nullable', 'string', 'max:100'],
             'patronymic' => 'nullable|string|max:100',
+            'legal_name' => [Rule::requiredIf($request->input('client_type') === Client::TYPE_LEGAL), 'nullable', 'string', 'max:255'],
+            'inn' => 'nullable|string|max:12',
+            'kpp' => 'nullable|string|max:9',
+            'legal_address' => 'nullable|string|max:500',
             'phone' => 'required|string|max:50|unique:clients,phone',
             'email' => 'nullable|email|max:255',
             'passport_data' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:1000',
             'blacklist_flag' => 'boolean',
         ]);
-        $data['full_name'] = trim(implode(' ', array_filter([
-            $data['last_name'], $data['first_name'], $data['patronymic'] ?? '',
-        ])));
+        $data['full_name'] = $this->buildFullName($data);
         $data['blacklist_flag'] = $request->boolean('blacklist_flag');
         Client::create($data);
 
@@ -88,22 +94,37 @@ class ClientController extends Controller
     public function update(Request $request, Client $client)
     {
         $data = $request->validate([
-            'last_name' => 'required|string|max:100',
-            'first_name' => 'required|string|max:100',
+            'client_type' => ['required', Rule::in([Client::TYPE_INDIVIDUAL, Client::TYPE_LEGAL])],
+            'last_name' => [Rule::requiredIf($request->input('client_type') === Client::TYPE_INDIVIDUAL), 'nullable', 'string', 'max:100'],
+            'first_name' => [Rule::requiredIf($request->input('client_type') === Client::TYPE_INDIVIDUAL), 'nullable', 'string', 'max:100'],
             'patronymic' => 'nullable|string|max:100',
+            'legal_name' => [Rule::requiredIf($request->input('client_type') === Client::TYPE_LEGAL), 'nullable', 'string', 'max:255'],
+            'inn' => 'nullable|string|max:12',
+            'kpp' => 'nullable|string|max:9',
+            'legal_address' => 'nullable|string|max:500',
             'phone' => 'required|string|max:50|unique:clients,phone,' . $client->id,
             'email' => 'nullable|email|max:255',
             'passport_data' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:1000',
             'blacklist_flag' => 'boolean',
         ]);
-        $data['full_name'] = trim(implode(' ', array_filter([
-            $data['last_name'], $data['first_name'], $data['patronymic'] ?? '',
-        ])));
+        $data['full_name'] = $this->buildFullName($data);
         $data['blacklist_flag'] = $request->boolean('blacklist_flag');
         $client->update($data);
 
         return redirect()->route('clients.show', $client)->with('success', 'Клиент обновлён.');
+    }
+
+    private function buildFullName(array $data): string
+    {
+        if (($data['client_type'] ?? '') === Client::TYPE_LEGAL && ! empty(trim($data['legal_name'] ?? ''))) {
+            return trim($data['legal_name']);
+        }
+        return trim(implode(' ', array_filter([
+            $data['last_name'] ?? '',
+            $data['first_name'] ?? '',
+            $data['patronymic'] ?? '',
+        ])));
     }
 
     public function destroy(Client $client)
