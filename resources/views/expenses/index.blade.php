@@ -27,13 +27,21 @@
             @endforeach
         </select>
     </div>
+    <div class="col-auto">
+        <select name="client_id" class="form-select form-select-sm" style="max-width:200px">
+            <option value="">Все клиенты</option>
+            @foreach($clients as $c)
+            <option value="{{ $c->id }}" @selected(request('client_id') == $c->id)>{{ $c->full_name }}</option>
+            @endforeach
+        </select>
+    </div>
     <div class="col-auto"><button type="submit" class="btn btn-sm btn-outline-primary">Показать</button></div>
 </form>
 <div class="card">
     <div class="card-body p-0">
         <table class="table table-hover mb-0">
             <thead class="table-light">
-                <tr><th>№</th><th>Дата</th><th>Вид расхода</th><th>Магазин</th><th>Сумма</th><th></th></tr>
+                <tr><th>№</th><th>Дата</th><th>Вид расхода</th><th>Магазин</th><th>Клиент (долг)</th><th>Сумма</th><th></th></tr>
             </thead>
             <tbody>
                 @forelse($expenses as $e)
@@ -42,11 +50,12 @@
                     <td>{{ \Carbon\Carbon::parse($e->expense_date)->format('d.m.Y') }}</td>
                     <td>{{ $e->expenseType->name }}</td>
                     <td>{{ $e->store?->name ?? '—' }}</td>
+                    <td>@if($e->client)<a href="{{ route('clients.show', $e->client) }}">{{ $e->client->full_name }}</a>@else —@endif</td>
                     <td>{{ number_format($e->amount, 2, ',', ' ') }} ₽</td>
                     <td><a href="{{ route('expenses.show', $e) }}" class="btn btn-sm btn-outline-primary">Подробнее</a></td>
                 </tr>
                 @empty
-                <tr><td colspan="6" class="text-muted">Нет документов. <a href="{{ route('expenses.create') }}">Начислить расход</a></td></tr>
+                <tr><td colspan="7" class="text-muted">Нет документов. <a href="{{ route('expenses.create') }}">Начислить расход</a></td></tr>
                 @endforelse
             </tbody>
         </table>

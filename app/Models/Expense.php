@@ -15,7 +15,7 @@ class Expense extends Model
         });
     }
 
-    protected $fillable = ['number', 'expense_type_id', 'store_id', 'amount', 'expense_date', 'description', 'created_by'];
+    protected $fillable = ['number', 'expense_type_id', 'store_id', 'client_id', 'amount', 'expense_date', 'description', 'created_by'];
 
     protected function casts(): array
     {
@@ -33,6 +33,11 @@ class Expense extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
     }
 
     public function createdByUser(): BelongsTo

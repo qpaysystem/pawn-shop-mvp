@@ -31,6 +31,15 @@
                         @endforeach
                     </select>
                 </div>
+                <div class="col-12 mb-3">
+                    <label class="form-label">Клиент (при указании возникнет долг клиента)</label>
+                    <select name="client_id" class="form-select">
+                        <option value="">— без привязки к клиенту</option>
+                        @foreach($clients as $c)
+                        <option value="{{ $c->id }}" @selected(old('client_id') == $c->id)>{{ $c->full_name }} @if($c->phone)({{ $c->phone }})@endif</option>
+                        @endforeach
+                    </select>
+                </div>
             </div>
             <div class="row">
                 <div class="col-md-6 mb-3">

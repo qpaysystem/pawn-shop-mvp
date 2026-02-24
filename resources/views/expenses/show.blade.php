@@ -20,6 +20,7 @@
         <p><strong>Дата:</strong> {{ \Carbon\Carbon::parse($expense->expense_date)->format('d.m.Y') }}</p>
         <p><strong>Вид расхода:</strong> {{ $expense->expenseType->name }}</p>
         <p><strong>Магазин:</strong> {{ $expense->store?->name ?? '—' }}</p>
+        <p><strong>Клиент (долг):</strong> @if($expense->client)<a href="{{ route('clients.show', $expense->client) }}">{{ $expense->client->full_name }}</a>@else —@endif</p>
         <p><strong>Сумма:</strong> {{ number_format($expense->amount, 2, ',', ' ') }} ₽</p>
         @if($expense->description)<p><strong>Комментарий:</strong> {{ $expense->description }}</p>@endif
         @if($expense->createdByUser)<p class="text-muted small mb-0">Создал: {{ $expense->createdByUser->name ?? $expense->createdByUser->email }}, {{ \Carbon\Carbon::parse($expense->created_at)->format('d.m.Y H:i') }}</p>@endif
