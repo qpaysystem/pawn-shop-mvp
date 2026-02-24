@@ -108,12 +108,14 @@ class ChartOfAccountsController extends Controller
             $balanceAfter = $balanceBefore + $debit - $credit;
 
             if ($balanceBefore != 0 || $debit != 0 || $credit != 0 || $balanceAfter != 0) {
+                $byClient = $this->turnoverByClient($account->id, $dateFrom, $dateTo, $storeIds, $storeId, $clientId);
                 $rows[] = (object) [
                     'account' => $account,
                     'balance_before' => $balanceBefore,
                     'debit' => $debit,
                     'credit' => $credit,
                     'balance_after' => $balanceAfter,
+                    'by_client' => $byClient,
                 ];
             }
         }
@@ -139,5 +141,43 @@ class ChartOfAccountsController extends Controller
         }
         $sum = $q->selectRaw('COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) as balance')->value('balance');
         return (float) ($sum ?? 0);
+    }
+
+    /** Обороты по счёту в разрезе клиентов за период (для раскрытия ОСВ). */
+    private function turnoverByClient(int $accountId, string $dateFrom, string $dateTo, array $storeIds, ?string $storeId, ?int $clientId = null): array
+    {
+        $q = LedgerEntry::where('account_id', $accountId)->whereBetween('entry_date', [$dateFrom, $dateTo]);
+        if ($storeId && in_array((int) $storeId, $storeIds, true)) {
+            $q->where('store_id', $storeId);
+        } else {
+            $q->where(function ($q2) use ($storeIds) {
+                $q2->whereIn('store_id', $storeIds)->orWhereNull('store_id');
+            });
+        }
+        if ($clientId) {
+            $q->where('client_id', $clientId);
+        }
+        $totals = $q->selectRaw('client_id, COALESCE(SUM(debit), 0) as debit, COALESCE(SUM(credit), 0) as credit')
+            ->groupBy('client_id')
+            ->get();
+
+        $result = [];
+        foreach ($totals as $t) {
+            $cid = $t->client_id;
+            $balanceBefore = $this->balanceBefore($accountId, $dateFrom, $storeIds, $storeId, $cid);
+            $d = (float) $t->debit;
+            $c = (float) $t->credit;
+            $balanceAfter = $balanceBefore + $d - $c;
+            $client = $cid ? Client::find($cid) : null;
+            $result[] = (object) [
+                'client_id' => $cid,
+                'client_name' => $client ? $client->full_name : '— Без привязки к клиенту',
+                'balance_before' => $balanceBefore,
+                'debit' => $d,
+                'credit' => $c,
+                'balance_after' => $balanceAfter,
+            ];
+        }
+        return $result;
     }
 }

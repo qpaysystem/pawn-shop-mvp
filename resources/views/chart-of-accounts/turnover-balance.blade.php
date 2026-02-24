@@ -34,7 +34,7 @@
         <select name="client_id" class="form-select form-select-sm" style="width:auto; max-width:220px" onchange="this.form.submit()">
             <option value="">Все</option>
             @foreach($clients as $c)
-                <option value="{{ $c->id }}" {{ $clientId == $c->id ? 'selected' : '' }}>{{ $c->last_name }} {{ $c->first_name }}</option>
+                <option value="{{ $c->id }}" {{ $clientId == $c->id ? 'selected' : '' }}>{{ $c->full_name }}</option>
             @endforeach
         </select>
     </div>
@@ -64,9 +64,17 @@
                 </thead>
                 <tbody>
                     @forelse($rows as $row)
-                    <tr>
+                    <tr class="align-middle">
                         <td><strong>{{ $row->account->code }}</strong></td>
-                        <td>{{ $row->account->name }}</td>
+                        <td>
+                            @if(!empty($row->by_client))
+                                <button type="button" class="btn btn-link btn-sm p-0 text-start text-decoration-none" data-bs-toggle="collapse" data-bs-target="#osv-client-{{ $row->account->id }}" aria-expanded="false">
+                                    <span class="osv-toggle-icon me-1">▶</span>{{ $row->account->name }}
+                                </button>
+                            @else
+                                {{ $row->account->name }}
+                            @endif
+                        </td>
                         <td class="text-end">{{ number_format($row->balance_before, 2, ',', ' ') }}</td>
                         <td class="text-end">{{ number_format($row->debit, 2, ',', ' ') }}</td>
                         <td class="text-end">{{ number_format($row->credit, 2, ',', ' ') }}</td>
@@ -75,6 +83,31 @@
                             <a href="{{ route('chart-of-accounts.show', ['account' => $row->account, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'store_id' => $storeId, 'client_id' => $clientId]) }}" class="btn btn-sm btn-outline-primary">Карточка</a>
                         </td>
                     </tr>
+                    @if(!empty($row->by_client))
+                    <tr class="table-light">
+                        <td colspan="7" class="p-0 border-0">
+                            <div class="collapse" id="osv-client-{{ $row->account->id }}">
+                                <div class="p-2 small">
+                                    <table class="table table-sm table-bordered mb-0 bg-white">
+                                        <thead><tr><th>Клиент</th><th class="text-end">Сальдо на начало</th><th class="text-end">Оборот дебет</th><th class="text-end">Оборот кредит</th><th class="text-end">Сальдо на конец</th><th></th></tr></thead>
+                                        <tbody>
+                                            @foreach($row->by_client as $bc)
+                                            <tr>
+                                                <td>@if($bc->client_id)<a href="{{ route('clients.show', ['client' => $bc->client_id]) }}">{{ $bc->client_name }}</a>@else{{ $bc->client_name }}@endif</td>
+                                                <td class="text-end">{{ number_format($bc->balance_before, 2, ',', ' ') }}</td>
+                                                <td class="text-end">{{ number_format($bc->debit, 2, ',', ' ') }}</td>
+                                                <td class="text-end">{{ number_format($bc->credit, 2, ',', ' ') }}</td>
+                                                <td class="text-end">{{ number_format($bc->balance_after, 2, ',', ' ') }}</td>
+                                                <td>@if($bc->client_id)<a href="{{ route('chart-of-accounts.show', ['account' => $row->account, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'store_id' => $storeId, 'client_id' => $bc->client_id]) }}" class="btn btn-sm btn-outline-secondary">Карточка</a>@endif</td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    @endif
                     @empty
                     <tr>
                         <td colspan="7" class="text-muted text-center py-4">Нет данных за период. Проводки создаются при кассовых операциях, выдаче займов, скупке и продажах.</td>
@@ -85,4 +118,13 @@
         </div>
     </div>
 </div>
+<script>
+document.querySelectorAll('[data-bs-toggle="collapse"][data-bs-target^="#osv-client-"]').forEach(function(btn) {
+    var target = document.querySelector(btn.getAttribute('data-bs-target'));
+    if (target) {
+        target.addEventListener('show.bs.collapse', function() { btn.querySelector('.osv-toggle-icon').textContent = '▼'; });
+        target.addEventListener('hide.bs.collapse', function() { btn.querySelector('.osv-toggle-icon').textContent = '▶'; });
+    }
+});
+</script>
 @endsection
