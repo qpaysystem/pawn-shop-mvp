@@ -159,6 +159,9 @@ class ClientController extends Controller
             return redirect()->route('clients.show', $client)->with('error', '1С вернула ответ в неожиданном формате. Проверьте storage/logs/laravel.log (LmbUserApiService).');
         }
 
+        // Убрать BOM и пробелы в ключах (1С может отдавать с лишними символами)
+        $data = $this->cleanLmbDataKeys($data);
+
         // Ответ 1С может быть обёрнут: {"data": {...}} или {"result": {...}}
         foreach (['data', 'result', 'response', 'user'] as $wrapper) {
             if (isset($data[$wrapper]) && is_array($data[$wrapper])
@@ -170,16 +173,36 @@ class ClientController extends Controller
         if (isset($data['User_Uid']) && empty($data['user_uid'] ?? '')) {
             $data['user_uid'] = $data['User_Uid'];
         }
+        $data = $this->cleanLmbDataKeys($data);
 
         if (empty($data) || empty($data['user_uid'] ?? '')) {
             $client->update(['lmb_data' => null]);
             return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (пустой ответ).');
         }
 
+        \Illuminate\Support\Facades\Log::info('syncLmb: данные от 1С перед нормализацией', [
+            'keys' => array_keys($data),
+            'sample' => array_map(fn ($v) => is_string($v) ? mb_substr($v, 0, 80) : $v, $data),
+        ]);
         $data = $this->normalizeLmbUserData($data);
+        if (empty($data['user_uid'])) {
+            $client->update(['lmb_data' => null]);
+            return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (нет кода user_uid в ответе).');
+        }
         $client->update(['lmb_data' => $data]);
 
         return redirect()->route('clients.show', $client)->with('success', 'Данные из 1С загружены и сохранены в карточку.');
+    }
+
+    /** Убрать BOM и пробелы в ключах массива от 1С. */
+    private function cleanLmbDataKeys(array $data): array
+    {
+        $out = [];
+        foreach ($data as $k => $v) {
+            $key = trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $k));
+            $out[$key] = is_array($v) ? $this->cleanLmbDataKeys($v) : $v;
+        }
+        return $out;
     }
 
     /**

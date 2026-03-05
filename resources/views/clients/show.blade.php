@@ -34,7 +34,7 @@
         </form>
     </div>
     <div class="card-body">
-        @if($client->lmb_data)
+        @if($client->lmb_data && !empty($client->lmb_data['user_uid']))
             <p class="mb-1"><strong>Код в 1С (user_uid):</strong> {{ $client->lmb_data['user_uid'] ?? '—' }}</p>
             <p class="mb-1"><strong>ФИО / first_name:</strong> {{ $client->lmb_data['first_name'] ?? '—' }}</p>
             <p class="mb-1"><strong>Имя (second_name):</strong> {{ $client->lmb_data['second_name'] ?? '—' }}</p>
