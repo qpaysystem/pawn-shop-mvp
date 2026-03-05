@@ -159,6 +159,12 @@ class ClientController extends Controller
             return redirect()->route('clients.show', $client)->with('error', '1С вернула ответ в неожиданном формате. Проверьте storage/logs/laravel.log (LmbUserApiService).');
         }
 
+        // Ответ 1С может быть массивом с одним объектом: [{"user_uid": "...", "first_name": "..."}]
+        $keys = array_keys($data);
+        if (count($data) > 0 && isset($data[0]) && is_array($data[0]) && $keys === range(0, count($data) - 1)) {
+            $data = $data[0];
+        }
+
         // Убрать BOM и пробелы в ключах (1С может отдавать с лишними символами)
         $data = $this->cleanLmbDataKeys($data);
 
@@ -184,7 +190,8 @@ class ClientController extends Controller
 
         if (empty($data) || empty($data['user_uid'] ?? '')) {
             $client->update(['lmb_data' => null]);
-            return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (пустой ответ).');
+            \Illuminate\Support\Facades\Log::info('syncLmb: пустой ответ или нет user_uid/ID', ['keys' => array_keys($data)]);
+            return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (пустой ответ). Проверьте в storage/logs/laravel.log записи syncLmb и LmbUserApiService — там видно, что вернула 1С.');
         }
 
         \Illuminate\Support\Facades\Log::info('syncLmb: данные от 1С перед нормализацией', [
@@ -220,7 +227,7 @@ class ClientController extends Controller
     {
         $map = [
             'user_uid' => ['user_uid', 'User_Uid', 'UserUid', 'userUid', 'USER_UID', 'id', 'ID', 'Id', 'Код', 'code', 'guid'],
-            'first_name' => ['first_name', 'First_Name', 'FirstName', 'firstname', 'first', 'ФИО', 'FIO', 'fio', 'Имя', 'name', 'full_name'],
+            'first_name' => ['first_name', 'First_Name', 'FirstName', 'firstname', 'first', 'ФИО', 'FIO', 'fio', 'Имя', 'Наименование', 'name', 'full_name'],
             'second_name' => ['second_name', 'Second_Name', 'SecondName', 'secondname', 'second', 'Имя'],
             'last_name' => ['last_name', 'Last_Name', 'LastName', 'lastname', 'last', 'Отчество'],
             'phone' => ['phone', 'Phone', 'PhoneNumber', 'tel', 'Телефон', 'telephone'],
