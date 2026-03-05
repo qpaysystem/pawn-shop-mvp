@@ -71,6 +71,7 @@ class LmbUserApiService
         }
 
         $url = $this->baseUrl . '/user/' . rawurlencode($id);
+        Log::info('LmbUserApiService: запрос user по телефону', ['url' => $url]);
 
         try {
             $response = $this->request()->get($url);

@@ -147,7 +147,8 @@ class ClientController extends Controller
         $data = $lmbApi->getUserByPhone($phone);
 
         if ($data === null) {
-            return redirect()->route('clients.show', $client)->with('error', 'Не удалось получить данные из 1С. Выполните на сервере: php artisan config:clear и проверьте в .env переменные LMB_USER_API_URL (без порта 5665), LMB_USER_API_USERNAME, LMB_USER_API_PASSWORD.');
+            \Illuminate\Support\Facades\Log::warning('ClientController::syncLmb получил null от LmbUserApiService — на сервере старая версия кода. Нужен git pull и ./deploy.sh.');
+            return redirect()->route('clients.show', $client)->with('error', 'Ошибка 1С: устаревший код. На сервере выполните: cd ~/pawn-shop-mvp && git pull origin main && ./deploy.sh. В .env должно быть: LMB_USER_API_URL=http://5.128.186.3/lmb/hs/es (без :5665). Затем: php artisan config:clear.');
         }
 
         if (isset($data['error'])) {
