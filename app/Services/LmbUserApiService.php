@@ -57,8 +57,9 @@ class LmbUserApiService
     }
 
     /**
-     * GET user/{ID} — данные контрагента по телефону (ID = номер с + для РФ).
+     * GET user/{ID} — данные контрагента по телефону (ID = только цифры номера).
      * Ответ 1С: user_uid, first_name, second_name, last_name, phone (JSON).
+     * При ошибке возвращает ['error' => 'причина'].
      *
      * @return array<string, mixed>|null
      */
@@ -66,7 +67,7 @@ class LmbUserApiService
     {
         $id = $this->formatPhoneForUserUrl($phone);
         if ($id === '') {
-            return null;
+            return ['error' => 'Некорректный номер телефона.'];
         }
 
         $url = $this->baseUrl . '/user/' . rawurlencode($id);
@@ -79,24 +80,25 @@ class LmbUserApiService
                     'url' => $url,
                     'status' => $response->status(),
                 ]);
-                return null;
+                return ['error' => '1С вернула HTTP ' . $response->status() . '. Проверьте URL и доступ к серверу.'];
             }
 
             $body = $response->body();
             $data = $this->parseResponse($body);
             if ($data !== null && is_array($data)) {
-                // Возвращаем сырой ответ 1С (user_uid, first_name, second_name, last_name, phone) для сохранения в карточку
                 return $data;
             }
 
             return ['raw' => $body];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::warning('LmbUserApiService: ошибка соединения', ['url' => $url, 'message' => $e->getMessage()]);
+            return ['error' => 'Нет связи с сервером 1С: ' . $e->getMessage() . '. Убедитесь, что хост ' . parse_url($this->baseUrl, PHP_URL_HOST) . ' доступен с этого компьютера (сеть/VPN).'];
         } catch (\Throwable $e) {
-            Log::warning('LmbUserApiService: ошибка запроса', [
-                'url' => $url,
-                'message' => $e->getMessage(),
-            ]);
-            return null;
+            Log::warning('LmbUserApiService: ошибка запроса', ['url' => $url, 'message' => $e->getMessage()]);
+            return ['error' => 'Ошибка запроса к 1С: ' . $e->getMessage()];
         }
+
+        return ['error' => 'Не удалось получить ответ от 1С. Проверьте LMB_USER_API_URL в .env (без порта 5665: http://5.128.186.3/lmb/hs/es).'];
     }
 
     /**

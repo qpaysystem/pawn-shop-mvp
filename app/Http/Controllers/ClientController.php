@@ -147,7 +147,11 @@ class ClientController extends Controller
         $data = $lmbApi->getUserByPhone($phone);
 
         if ($data === null) {
-            return redirect()->route('clients.show', $client)->with('error', 'Не удалось получить данные из 1С (сервер недоступен или ошибка). Запустите с сервера, с которого доступен API.');
+            return redirect()->route('clients.show', $client)->with('error', 'Не удалось получить данные из 1С. Выполните на сервере: php artisan config:clear и проверьте в .env переменные LMB_USER_API_URL (без порта 5665), LMB_USER_API_USERNAME, LMB_USER_API_PASSWORD.');
+        }
+
+        if (isset($data['error'])) {
+            return redirect()->route('clients.show', $client)->with('error', $data['error']);
         }
 
         if (isset($data['raw'])) {
