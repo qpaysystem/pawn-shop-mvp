@@ -156,7 +156,19 @@ class ClientController extends Controller
         }
 
         if (isset($data['raw'])) {
-            return redirect()->route('clients.show', $client)->with('error', '1С вернула ответ в неожиданном формате.');
+            return redirect()->route('clients.show', $client)->with('error', '1С вернула ответ в неожиданном формате. Проверьте storage/logs/laravel.log (LmbUserApiService).');
+        }
+
+        // Ответ 1С может быть обёрнут: {"data": {...}} или {"result": {...}}
+        foreach (['data', 'result', 'response', 'user'] as $wrapper) {
+            if (isset($data[$wrapper]) && is_array($data[$wrapper])
+                && (isset($data[$wrapper]['user_uid']) || isset($data[$wrapper]['User_Uid'])) {
+                $data = $data[$wrapper];
+                break;
+            }
+        }
+        if (isset($data['User_Uid']) && empty($data['user_uid'] ?? '')) {
+            $data['user_uid'] = $data['User_Uid'];
         }
 
         if (empty($data) || empty($data['user_uid'] ?? '')) {

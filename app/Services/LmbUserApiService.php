@@ -89,7 +89,10 @@ class LmbUserApiService
             if ($data !== null && is_array($data)) {
                 return $data;
             }
-
+            Log::warning('LmbUserApiService: не удалось разобрать ответ', [
+                'body_length' => strlen($body),
+                'body_preview' => mb_substr(trim($body), 0, 500),
+            ]);
             return ['raw' => $body];
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             Log::warning('LmbUserApiService: ошибка соединения', ['url' => $url, 'message' => $e->getMessage()]);
@@ -278,15 +281,27 @@ class LmbUserApiService
 
     private function parseResponse(string $body): ?array
     {
+        // Убрать BOM и лишние пробелы (1С может отдавать с BOM или пробелами)
+        $body = preg_replace('/^\xEF\xBB\xBF/', '', $body);
         $body = trim($body);
         if ($body === '') {
             return null;
         }
 
         $first = $body[0] ?? '';
-        if ($first === '{') {
+        if ($first === '{' || $first === '[') {
             $decoded = json_decode($body, true);
-            return is_array($decoded) ? $decoded : null;
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+            return null;
+        }
+        // Попробовать json_decode в любом случае (на случай лишних символов в начале)
+        if (str_contains($body, '{')) {
+            $decoded = json_decode($body, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
         }
         if ($first === '<') {
             try {
