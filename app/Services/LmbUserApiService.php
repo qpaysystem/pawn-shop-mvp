@@ -87,6 +87,7 @@ class LmbUserApiService
             $body = $response->body();
             $data = $this->parseResponse($body);
             if ($data !== null && is_array($data)) {
+                Log::info('LmbUserApiService: получен ответ 1С', ['keys' => array_keys($data), 'user_uid' => $data['user_uid'] ?? $data['User_Uid'] ?? null]);
                 return $data;
             }
             Log::warning('LmbUserApiService: не удалось разобрать ответ', [

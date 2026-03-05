@@ -184,23 +184,33 @@ class ClientController extends Controller
 
     /**
      * Привести ключи ответа 1С к единому виду (user_uid, first_name, second_name, last_name, phone).
+     * Учитываются английские, PascalCase и русские имена полей.
      */
     private function normalizeLmbUserData(array $data): array
     {
         $map = [
-            'user_uid' => ['user_uid', 'User_Uid', 'UserUid', 'userUid', 'USER_UID'],
-            'first_name' => ['first_name', 'First_Name', 'FirstName', 'firstname', 'first'],
-            'second_name' => ['second_name', 'Second_Name', 'SecondName', 'secondname', 'second'],
-            'last_name' => ['last_name', 'Last_Name', 'LastName', 'lastname', 'last'],
-            'phone' => ['phone', 'Phone', 'PhoneNumber', 'tel'],
+            'user_uid' => ['user_uid', 'User_Uid', 'UserUid', 'userUid', 'USER_UID', 'Код', 'code', 'guid'],
+            'first_name' => ['first_name', 'First_Name', 'FirstName', 'firstname', 'first', 'ФИО', 'Имя', 'name', 'full_name'],
+            'second_name' => ['second_name', 'Second_Name', 'SecondName', 'secondname', 'second', 'Имя'],
+            'last_name' => ['last_name', 'Last_Name', 'LastName', 'lastname', 'last', 'Отчество'],
+            'phone' => ['phone', 'Phone', 'PhoneNumber', 'tel', 'Телефон', 'telephone'],
         ];
         $out = [];
         foreach ($map as $ourKey => $variants) {
             $value = $data[$ourKey] ?? null;
             if ($value === null || $value === '') {
-                foreach ($variants as $v) {
-                    if (isset($data[$v]) && (string) $data[$v] !== '') {
-                        $value = $data[$v];
+                foreach ($variants as $variantKey) {
+                    $found = isset($data[$variantKey]) ? $data[$variantKey] : null;
+                    if ($found === null) {
+                        foreach (array_keys($data) as $k) {
+                            if (strcasecmp($k, $variantKey) === 0 && (string) $data[$k] !== '') {
+                                $found = $data[$k];
+                                break;
+                            }
+                        }
+                    }
+                    if ($found !== null && (string) $found !== '') {
+                        $value = $found;
                         break;
                     }
                 }
