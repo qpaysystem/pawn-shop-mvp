@@ -46,9 +46,9 @@ return [
         'login' => env('MTS_VPBX_LOGIN', ''),
         'password' => env('MTS_VPBX_PASSWORD', ''), // токен авторизации (X-AUTH-TOKEN)
     ],
-    // Выгрузка данных по контрагенту (1С). Сначала логин (если указан login_url), затем запросы с сессией. Basic Auth: UserWebServis / UserWebServis
+    // Выгрузка данных по контрагенту (1С). GET {base_url}/user/{phone} → JSON (user_uid, first_name, …) или {}. Basic Auth: UserWebServis / UserWebServis
     'lmb_user_api' => [
-        'base_url' => env('LMB_USER_API_URL', 'http://5.128.186.3:5665/lmb/hs/es'),
+        'base_url' => env('LMB_USER_API_URL', 'http://5.128.186.3/lmb/hs/es'),
         'login_url' => env('LMB_USER_API_LOGIN_URL', ''), // если задан — сначала POST сюда, затем запросы с Cookie
         'timeout' => (int) env('LMB_USER_API_TIMEOUT', 8),
         'username' => env('LMB_USER_API_USERNAME', 'UserWebServis'),

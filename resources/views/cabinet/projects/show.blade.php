@@ -188,23 +188,101 @@
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
                         <tr>
+                            <th style="width: 2rem;"></th>
                             <th>Клиент</th>
                             <th class="text-end">Сумма займа (остаток)</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($loansByClient ?? [] as $row)
-                        <tr>
-                            <td>{{ $row['client']->full_name }}</td>
+                        @php
+                            $client = $row['client'];
+                            $contracts = $row['contracts'] ?? $client->pawnContracts()->where('is_redeemed', false)->orderByDesc('loan_date')->get();
+                        @endphp
+                        <tr class="align-middle">
+                            <td class="pe-0">
+                                @if($contracts->isNotEmpty())
+                                    <button type="button" class="btn btn-sm btn-link text-secondary p-0 border-0" style="min-width: 1.5rem;" data-bs-toggle="collapse" data-bs-target="#loans-docs-{{ $client->id }}" aria-expanded="false" title="Показать договоры">
+                                        <i class="bi bi-chevron-down collapse-icon"></i>
+                                    </button>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if($contracts->isNotEmpty())
+                                    <span class="cursor-pointer text-primary" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#loans-docs-{{ $client->id }}" aria-expanded="false">{{ $client->full_name }}</span>
+                                @else
+                                    {{ $client->full_name }}
+                                @endif
+                            </td>
                             <td class="text-end">{{ number_format($row['amount'], 2) }} {{ \App\Models\Setting::get('currency', 'RUB') }}</td>
                         </tr>
+                        @if($contracts->isNotEmpty())
+                        <tr class="table-light">
+                            <td colspan="3" class="p-0 border-0">
+                                <div class="collapse" id="loans-docs-{{ $client->id }}">
+                                    <div class="px-3 pb-3 pt-0">
+                                        <table class="table table-sm table-bordered mb-0 bg-white">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>№ договора</th>
+                                                    <th>Товар</th>
+                                                    <th class="text-end">Сумма займа</th>
+                                                    <th>Дата займа</th>
+                                                    <th>Выкуп</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($contracts as $pc)
+                                                <tr>
+                                                    <td>
+                                                        @if(Route::has('pawn-contracts.show'))
+                                                            <a href="{{ route('pawn-contracts.show', $pc) }}" target="_blank">{{ $pc->contract_number }}</a>
+                                                        @else
+                                                            {{ $pc->contract_number }}
+                                                        @endif
+                                                    </td>
+                                                    <td>{{ $pc->item?->name ?? '—' }}</td>
+                                                    <td class="text-end">{{ number_format($pc->loan_amount, 0, '', ' ') }} {{ \App\Models\Setting::get('currency', 'RUB') }}</td>
+                                                    <td>{{ $pc->loan_date?->format('d.m.Y') ?? '—' }}</td>
+                                                    <td>{{ $pc->is_redeemed ? 'Выкуплен' : 'В залоге' }}</td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        @endif
                         @empty
-                        <tr><td colspan="2" class="text-muted">Нет данных о займах по клиентам проекта</td></tr>
+                        <tr><td colspan="3" class="text-muted">Нет данных о займах по клиентам проекта</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
+        <script>
+        (function() {
+            document.querySelectorAll('#summary .collapse[id^="loans-docs-"]').forEach(function(collapseEl) {
+                collapseEl.addEventListener('show.bs.collapse', function() {
+                    var id = this.id;
+                    document.querySelectorAll('#summary [data-bs-target="#' + id + '"]').forEach(function(btn) {
+                        var icon = btn.querySelector('.collapse-icon');
+                        if (icon) { icon.classList.remove('bi-chevron-down'); icon.classList.add('bi-chevron-up'); }
+                    });
+                });
+                collapseEl.addEventListener('hide.bs.collapse', function() {
+                    var id = this.id;
+                    document.querySelectorAll('#summary [data-bs-target="#' + id + '"]').forEach(function(btn) {
+                        var icon = btn.querySelector('.collapse-icon');
+                        if (icon) { icon.classList.remove('bi-chevron-up'); icon.classList.add('bi-chevron-down'); }
+                    });
+                });
+            });
+        })();
+        </script>
 
         <h5 class="mb-2">Расходы по клиентам в проект</h5>
         <div class="card border-0 shadow-sm">

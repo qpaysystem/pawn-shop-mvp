@@ -2,9 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Оценщик">
     <title><?php echo $__env->yieldContent('title', 'Дашборд'); ?> — <?php echo e(config('services.lombard.name', config('app.name'))); ?></title>
+    <link rel="manifest" href="<?php echo e(asset('manifest-appraiser.json')); ?>">
+    <link rel="apple-touch-icon" href="<?php echo e(asset('images/pwa-icon-192.png')); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,9 +24,10 @@
             --lombard-accent-hover: #fdd880;
         }
         body { font-family: Montserrat, sans-serif; }
-        /* Сайдбар в стиле лендинга */
+        /* Сайдбар в стиле лендинга: шире, чтобы названия разделов в один ряд + иконки */
         .app-sidebar {
-            width: 220px;
+            width: 280px;
+            min-width: 280px;
             min-height: 100vh;
             background-color: var(--lombard-primary);
         }
@@ -36,9 +42,10 @@
             padding: 0.5rem 0.75rem;
             border-radius: 6px;
             transition: color 0.2s, background 0.2s;
+            white-space: nowrap;
         }
         .app-sidebar .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
-        .app-sidebar .nav-link i { opacity: 0.9; margin-right: 0.35rem; }
+        .app-sidebar .nav-link i { opacity: 0.9; margin-right: 0.5rem; flex-shrink: 0; }
         .app-sidebar .nav-group-toggle {
             font-size: 0.7rem;
             font-weight: 600;
@@ -57,10 +64,12 @@
             align-items: center;
             justify-content: space-between;
             transition: color 0.2s, background 0.2s;
+            white-space: nowrap;
         }
         .app-sidebar .nav-group-toggle:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .app-sidebar .nav-group-toggle:first-of-type { margin-top: 0; }
-        .app-sidebar .nav-group-toggle .bi-chevron-down { transition: transform 0.2s; }
+        .app-sidebar .nav-group-toggle .nav-group-toggle-icon { margin-right: 0.5rem; opacity: 0.85; flex-shrink: 0; }
+        .app-sidebar .nav-group-toggle .bi-chevron-down { transition: transform 0.2s; flex-shrink: 0; }
         .app-sidebar .nav-group-toggle[aria-expanded="false"] .bi-chevron-down { transform: rotate(-90deg); }
         .app-sidebar .nav-group-items { padding-left: 0; list-style: none; }
         .app-sidebar .nav-group-items .nav-item { margin-bottom: 0; }
@@ -119,16 +128,184 @@
         }
         .app-main .alert-success { border-left: 4px solid #198754; }
         .app-main .alert-danger { border-left: 4px solid #dc3545; }
+
+        /* ——— Мобильная верстка ——— */
+        .app-mobile-header {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: var(--lombard-primary);
+            color: #fff;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1rem;
+            z-index: 1030;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .app-mobile-header .navbar-brand { color: #fff; font-size: 1.1rem; margin: 0; }
+        .app-mobile-header .btn-menu {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: rgba(255,255,255,0.9);
+            border-radius: 8px;
+            font-size: 1.5rem;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .app-mobile-header .btn-menu:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .app-sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1025;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        body.sidebar-open .app-sidebar-overlay { opacity: 1; }
+
+        @media (max-width: 991.98px) {
+            .app-mobile-header { display: flex; padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); padding-top: env(safe-area-inset-top); }
+            .app-sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 280px;
+                max-width: 85vw;
+                height: 100vh;
+                height: 100dvh;
+                z-index: 1030;
+                transform: translateX(-100%);
+                transition: transform 0.25s ease-out;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+                padding-top: env(safe-area-inset-top);
+            }
+            body.sidebar-open .app-sidebar { transform: translateX(0); }
+            .app-sidebar-overlay { display: block; pointer-events: none; }
+            body.sidebar-open .app-sidebar-overlay { pointer-events: auto; }
+            .app-main {
+                padding-top: calc(56px + env(safe-area-inset-top) + 1rem);
+                padding-left: max(1rem, env(safe-area-inset-left));
+                padding-right: max(1rem, env(safe-area-inset-right));
+                padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+                min-height: 100vh;
+                min-height: 100dvh;
+                width: 100%;
+            }
+            .app-main .btn { min-height: 44px; padding: 0.5rem 1rem; }
+            .app-main .form-control, .app-main .form-select {
+                min-height: 44px;
+                font-size: 16px; /* уменьшает зум iOS при фокусе */
+            }
+            .app-main .nav-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+            .app-main .nav-tabs .nav-link { white-space: nowrap; padding: 0.6rem 0.75rem; }
+            .app-main .table-responsive { -webkit-overflow-scrolling: touch; }
+            .app-main .table { font-size: 0.9rem; }
+        }
+
+        @media (max-width: 575.98px) {
+            .app-main .row.g-3 > [class*="col-"] { margin-bottom: 0.5rem; }
+            .app-main .d-flex.justify-content-between, .app-main .d-flex.justify-content-end { flex-wrap: wrap; gap: 0.5rem; }
+            .app-main .btn-group .btn { min-height: 44px; }
+        }
+
+        /* Режим оценщика: без сайдбара, только шапка + контент */
+        .appraiser-only-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+            padding-top: env(safe-area-inset-top);
+            background: var(--lombard-primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 1030;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .appraiser-only-header .brand { color: #fff; font-weight: 700; font-size: 1.15rem; text-decoration: none; }
+        .appraiser-only-header .brand:hover { color: var(--lombard-accent-hover); }
+        .appraiser-only-header .btn-outline-light {
+            border-color: rgba(255,255,255,0.5);
+            color: #fff;
+            min-height: 44px;
+            padding: 0.4rem 1rem;
+        }
+        .appraiser-only-header .btn-outline-light:hover {
+            background: var(--lombard-accent);
+            border-color: var(--lombard-accent);
+            color: #fff;
+        }
+        .appraiser-only-main {
+            padding-top: calc(56px + env(safe-area-inset-top) + 1rem);
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+            padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+            min-height: 100vh;
+            width: 100%;
+            background: #f8f9fa;
+        }
+        .appraiser-only-main .btn { min-height: 44px; padding: 0.5rem 1rem; }
+        .appraiser-only-main .form-control, .appraiser-only-main .form-select {
+            min-height: 44px;
+            font-size: 16px;
+        }
     </style>
     <?php echo $__env->yieldPushContent('styles'); ?>
 </head>
 <body class="d-flex">
-    <nav class="navbar navbar-dark flex-column align-items-stretch p-3 app-sidebar">
+    <?php if(!empty($is_appraiser)): ?>
+    <header class="appraiser-only-header">
+        <a href="<?php echo e(route('appraiser.home')); ?>" class="brand">Оценщик</a>
+        <form method="post" action="<?php echo e(route('logout')); ?>" class="d-inline">
+            <?php echo csrf_field(); ?>
+            <button type="submit" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-right"></i> Выход</button>
+        </form>
+    </header>
+    <main class="appraiser-only-main">
+        <?php if(session('success')): ?>
+            <div class="alert alert-success alert-dismissible fade show"><?php echo e(session('success')); ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        <?php endif; ?>
+        <?php if(session('error')): ?>
+            <div class="alert alert-danger alert-dismissible fade show"><?php echo e(session('error')); ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        <?php endif; ?>
+        <?php if($errors->any()): ?>
+            <div class="alert alert-danger alert-dismissible fade show">
+                <ul class="mb-0"><?php $__currentLoopData = $errors->all(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $e): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?><li><?php echo e($e); ?></li><?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?></ul>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
+        <?php echo $__env->yieldContent('content'); ?>
+    </main>
+    <?php else: ?>
+    <header class="app-mobile-header">
+        <button type="button" class="btn-menu" id="sidebar-toggle" aria-label="Меню"><i class="bi bi-list"></i></button>
+        <a class="navbar-brand" href="<?php echo e(route('dashboard')); ?>"><?php echo e(config('services.lombard.name', 'Ломбард')); ?></a>
+        <a class="btn-menu" href="<?php echo e(route('home')); ?>" target="_blank" aria-label="На сайт"><i class="bi bi-box-arrow-up-right"></i></a>
+    </header>
+    <div class="app-sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+    <nav class="navbar navbar-dark flex-column align-items-stretch p-3 app-sidebar" id="app-sidebar">
         <a class="navbar-brand mb-3" href="<?php echo e(route('dashboard')); ?>"><?php echo e(config('services.lombard.name', 'Ломбард')); ?></a>
         <a class="nav-link text-white-50 small mb-2" href="<?php echo e(route('home')); ?>" target="_blank"><i class="bi bi-box-arrow-up-right"></i> На сайт</a>
+        <a class="nav-link mb-2 py-2 rounded bg-white bg-opacity-10 text-white" href="<?php echo e(route('appraiser.home')); ?>"><i class="bi bi-phone"></i> Оценщик</a>
         <ul class="nav flex-column">
             <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-clients" aria-expanded="true" aria-controls="sidebar-group-clients"><span>Работа с клиентами</span><i class="bi bi-chevron-down"></i></button>
+                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-clients" aria-expanded="true" aria-controls="sidebar-group-clients"><i class="bi bi-people-fill nav-group-toggle-icon"></i><span>Работа с клиентами</span><i class="bi bi-chevron-down"></i></button>
                 <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-clients">
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('dashboard')); ?>"><i class="bi bi-grid"></i> Дашборд</a></li>
                     <?php if(auth()->guard()->check()): ?>
@@ -146,7 +323,7 @@
             </li>
 
             <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-finance" aria-expanded="true" aria-controls="sidebar-group-finance"><span>Финансы</span><i class="bi bi-chevron-down"></i></button>
+                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-finance" aria-expanded="true" aria-controls="sidebar-group-finance"><i class="bi bi-wallet2 nav-group-toggle-icon"></i><span>Финансы</span><i class="bi bi-chevron-down"></i></button>
                 <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-finance">
                     <?php if(auth()->user() && auth()->user()->canProcessSales()): ?>
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('cash.index')); ?>"><i class="bi bi-cash-stack"></i> Касса</a></li>
@@ -162,7 +339,7 @@
             </li>
 
             <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-settings" aria-expanded="true" aria-controls="sidebar-group-settings"><span>Настройки</span><i class="bi bi-chevron-down"></i></button>
+                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-settings" aria-expanded="true" aria-controls="sidebar-group-settings"><i class="bi bi-gear nav-group-toggle-icon"></i><span>Настройки</span><i class="bi bi-chevron-down"></i></button>
                 <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-settings">
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('item-categories.index')); ?>"><i class="bi bi-tags"></i> Категории</a></li>
                     <li class="nav-item"><a class="nav-link" href="<?php echo e(route('brands.index')); ?>"><i class="bi bi-award"></i> Бренды</a></li>
@@ -200,6 +377,7 @@
         <?php endif; ?>
         <?php echo $__env->yieldContent('content'); ?>
     </main>
+    <?php endif; ?>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       (function () {
@@ -230,6 +408,28 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
           } catch (e) {}
         }
+      })();
+      (function () {
+        var btn = document.getElementById('sidebar-toggle');
+        var overlay = document.getElementById('sidebar-overlay');
+        function open() {
+          document.body.classList.add('sidebar-open');
+          if (overlay) overlay.setAttribute('aria-hidden', 'false');
+        }
+        function close() {
+          document.body.classList.remove('sidebar-open');
+          if (overlay) overlay.setAttribute('aria-hidden', 'true');
+        }
+        function toggle() {
+          document.body.classList.toggle('sidebar-open');
+          if (overlay) overlay.setAttribute('aria-hidden', document.body.classList.contains('sidebar-open') ? 'false' : 'true');
+        }
+        if (btn) btn.addEventListener('click', toggle);
+        if (overlay) overlay.addEventListener('click', close);
+        var sidebar = document.getElementById('app-sidebar');
+        if (sidebar) sidebar.querySelectorAll('.nav-link').forEach(function (a) {
+          a.addEventListener('click', close);
+        });
       })();
     </script>
     <?php echo $__env->yieldPushContent('scripts'); ?>

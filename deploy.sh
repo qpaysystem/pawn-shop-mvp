@@ -41,13 +41,19 @@ $PHP artisan package:discover
 echo "3. Миграции..."
 $PHP artisan migrate --force
 
-echo "4. Кэш конфигурации и маршрутов..."
+echo "4. Очистка и пересборка кэша..."
+$PHP artisan config:clear
+$PHP artisan route:clear
+$PHP artisan view:clear
+$PHP artisan cache:clear
 $PHP artisan config:cache
 $PHP artisan route:cache
-$PHP artisan view:clear
 $PHP artisan view:cache
 
 echo "5. Симлинк storage (если ещё нет)..."
 $PHP artisan storage:link 2>/dev/null || true
+
+echo "6. Каталоги для загрузок..."
+mkdir -p storage/app/public/items
 
 echo "=== Готово. Проверьте сайт. ==="

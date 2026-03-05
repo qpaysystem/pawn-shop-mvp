@@ -7,6 +7,14 @@
         <a href="<?php echo e(route('purchase-contracts.print', $purchaseContract)); ?>" class="btn btn-outline-secondary" target="_blank"><i class="bi bi-printer"></i> Печать</a>
     </div>
 </div>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-document">Документ</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-ledger">Бухгалтерские проводки</a></li>
+</ul>
+
+<div class="tab-content">
+<div class="tab-pane fade show active" id="tab-document">
 <div class="row">
     <div class="col-md-6">
         <div class="card mb-4">
@@ -37,6 +45,16 @@
     </div>
 </div>
 <a href="<?php echo e(route('purchase-contracts.index')); ?>" class="btn btn-secondary">К списку договоров</a>
+</div>
+<div class="tab-pane fade" id="tab-ledger">
+    <?php echo $__env->make('documents._ledger_tab', [
+        'documentType' => $documentType,
+        'documentId' => $documentId,
+        'ledgerEntries' => $ledgerEntries,
+        'templates' => $templates,
+    ], \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?>
+</div>
+</div>
 <?php $__env->stopSection(); ?>
 
 <?php echo $__env->make('layouts.app', \Illuminate\Support\Arr::except(get_defined_vars(), ['__data', '__path']))->render(); ?><?php /**PATH /Users/evgeny/pawn-shop-mvp/resources/views/purchase-contracts/show.blade.php ENDPATH**/ ?>

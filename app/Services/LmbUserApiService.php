@@ -42,8 +42,7 @@ class LmbUserApiService
     }
 
     /**
-     * Формат номера для пути GET user/{ID} (по доке 1С: с плюсом для РФ).
-     * Пример: 79132083529 → +79132083529 → .../user/+79132083529
+     * Формат номера для пути GET user/{ID}. Используем только цифры (пример: 79014502232 → .../user/79014502232).
      */
     public function formatPhoneForUserUrl(string $phone): string
     {
@@ -51,11 +50,8 @@ class LmbUserApiService
         if ($digits === '') {
             return '';
         }
-        if (str_starts_with($digits, '7') && strlen($digits) >= 11) {
-            return '+' . $digits;
-        }
         if (str_starts_with($digits, '8') && strlen($digits) >= 11) {
-            return '+' . '7' . substr($digits, 1);
+            return '7' . substr($digits, 1);
         }
         return $digits;
     }

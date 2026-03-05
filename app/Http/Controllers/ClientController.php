@@ -154,6 +154,10 @@ class ClientController extends Controller
             return redirect()->route('clients.show', $client)->with('error', '1С вернула ответ в неожиданном формате.');
         }
 
+        if (empty($data) || empty($data['user_uid'])) {
+            return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (пустой ответ).');
+        }
+
         $client->update(['lmb_data' => $data]);
 
         return redirect()->route('clients.show', $client)->with('success', 'Данные из 1С загружены и сохранены в карточку.');
