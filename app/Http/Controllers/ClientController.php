@@ -162,16 +162,23 @@ class ClientController extends Controller
         // Убрать BOM и пробелы в ключах (1С может отдавать с лишними символами)
         $data = $this->cleanLmbDataKeys($data);
 
-        // Ответ 1С может быть обёрнут: {"data": {...}} или {"result": {...}}
+        // Ответ 1С может быть обёрнут: {"data": {...}} или {"result": {...}}; внутри — user_uid/ID, first_name/FIO
         foreach (['data', 'result', 'response', 'user'] as $wrapper) {
-            if (isset($data[$wrapper]) && is_array($data[$wrapper])
-                && (isset($data[$wrapper]['user_uid']) || isset($data[$wrapper]['User_Uid']))) {
-                $data = $data[$wrapper];
+            if (! isset($data[$wrapper]) || ! is_array($data[$wrapper])) {
+                continue;
+            }
+            $inner = $data[$wrapper];
+            $hasId = ! empty($inner['user_uid'] ?? $inner['User_Uid'] ?? $inner['ID'] ?? $inner['id'] ?? null);
+            if ($hasId) {
+                $data = $inner;
                 break;
             }
         }
         if (isset($data['User_Uid']) && empty($data['user_uid'] ?? '')) {
             $data['user_uid'] = $data['User_Uid'];
+        }
+        if (empty($data['user_uid'] ?? '') && ! empty($data['ID'] ?? $data['id'] ?? '')) {
+            $data['user_uid'] = (string) ($data['ID'] ?? $data['id']);
         }
         $data = $this->cleanLmbDataKeys($data);
 
@@ -212,8 +219,8 @@ class ClientController extends Controller
     private function normalizeLmbUserData(array $data): array
     {
         $map = [
-            'user_uid' => ['user_uid', 'User_Uid', 'UserUid', 'userUid', 'USER_UID', 'Код', 'code', 'guid'],
-            'first_name' => ['first_name', 'First_Name', 'FirstName', 'firstname', 'first', 'ФИО', 'Имя', 'name', 'full_name'],
+            'user_uid' => ['user_uid', 'User_Uid', 'UserUid', 'userUid', 'USER_UID', 'id', 'ID', 'Id', 'Код', 'code', 'guid'],
+            'first_name' => ['first_name', 'First_Name', 'FirstName', 'firstname', 'first', 'ФИО', 'FIO', 'fio', 'Имя', 'name', 'full_name'],
             'second_name' => ['second_name', 'Second_Name', 'SecondName', 'secondname', 'second', 'Имя'],
             'last_name' => ['last_name', 'Last_Name', 'LastName', 'lastname', 'last', 'Отчество'],
             'phone' => ['phone', 'Phone', 'PhoneNumber', 'tel', 'Телефон', 'telephone'],

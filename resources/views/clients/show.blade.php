@@ -42,6 +42,11 @@
             <p class="mb-0"><strong>Телефон:</strong> {{ $client->lmb_data['phone'] ?? '—' }}</p>
         @else
             <p class="text-muted mb-0">Данные не загружались. Нажмите «Загрузить из 1С», чтобы получить данные контрагента по номеру телефона.</p>
+            @if(!$client->phone)
+                <p class="text-warning small mb-0 mt-1">У клиента не указан телефон — укажите его и нажмите «Изменить», затем «Загрузить из 1С».</p>
+            @else
+                <p class="text-muted small mb-0 mt-1">После нажатия кнопки сверху при ошибке появится красное сообщение; подробности — в <code>storage/logs/laravel.log</code> на сервере (поиск: syncLmb, LmbUserApiService).</p>
+            @endif
         @endif
     </div>
 </div>
