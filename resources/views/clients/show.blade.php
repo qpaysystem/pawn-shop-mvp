@@ -34,12 +34,14 @@
         </form>
     </div>
     <div class="card-body">
-        @if($client->lmb_data && !empty($client->lmb_data['user_uid']))
-            <p class="mb-1"><strong>Код в 1С (user_uid):</strong> {{ $client->lmb_data['user_uid'] ?? '—' }}</p>
-            <p class="mb-1"><strong>ФИО / first_name:</strong> {{ $client->lmb_data['first_name'] ?? '—' }}</p>
-            <p class="mb-1"><strong>Имя (second_name):</strong> {{ $client->lmb_data['second_name'] ?? '—' }}</p>
-            <p class="mb-1"><strong>Отчество (last_name):</strong> {{ $client->lmb_data['last_name'] ?? '—' }}</p>
-            <p class="mb-0"><strong>Телефон:</strong> {{ $client->lmb_data['phone'] ?? '—' }}</p>
+        @if($client->user_uid || $client->lmb_full_name)
+            <p class="mb-1"><strong>Код в 1С (user_uid):</strong> {{ $client->user_uid ?? '—' }}</p>
+            <p class="mb-1"><strong>ФИО из 1С (first_name):</strong> {{ $client->lmb_full_name ?? '—' }}</p>
+            @if($client->lmb_data && (isset($client->lmb_data['second_name']) || isset($client->lmb_data['last_name']) || isset($client->lmb_data['phone'])))
+                <p class="mb-1"><strong>Имя (second_name):</strong> {{ $client->lmb_data['second_name'] ?? '—' }}</p>
+                <p class="mb-1"><strong>Отчество (last_name):</strong> {{ $client->lmb_data['last_name'] ?? '—' }}</p>
+                <p class="mb-0"><strong>Телефон из 1С:</strong> {{ $client->lmb_data['phone'] ?? '—' }}</p>
+            @endif
         @else
             <p class="text-muted mb-0">Данные не загружались. Нажмите «Загрузить из 1С», чтобы получить данные контрагента по номеру телефона.</p>
             @if(!$client->phone)

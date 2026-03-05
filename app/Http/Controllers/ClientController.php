@@ -189,7 +189,7 @@ class ClientController extends Controller
         $data = $this->cleanLmbDataKeys($data);
 
         if (empty($data) || empty($data['user_uid'] ?? '')) {
-            $client->update(['lmb_data' => null]);
+            $client->update(['lmb_data' => null, 'user_uid' => null, 'lmb_full_name' => null]);
             \Illuminate\Support\Facades\Log::info('syncLmb: пустой ответ или нет user_uid/ID', ['keys' => array_keys($data)]);
             return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (пустой ответ). Проверьте в storage/logs/laravel.log записи syncLmb и LmbUserApiService — там видно, что вернула 1С.');
         }
@@ -200,10 +200,14 @@ class ClientController extends Controller
         ]);
         $data = $this->normalizeLmbUserData($data);
         if (empty($data['user_uid'])) {
-            $client->update(['lmb_data' => null]);
+            $client->update(['lmb_data' => null, 'user_uid' => null, 'lmb_full_name' => null]);
             return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (нет кода user_uid в ответе).');
         }
-        $client->update(['lmb_data' => $data]);
+        $client->update([
+            'lmb_data' => $data,
+            'user_uid' => $data['user_uid'],
+            'lmb_full_name' => $data['first_name'] ?? null,
+        ]);
 
         return redirect()->route('clients.show', $client)->with('success', 'Данные из 1С загружены и сохранены в карточку.');
     }

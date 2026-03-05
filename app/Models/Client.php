@@ -17,7 +17,7 @@ class Client extends Model
         'client_type', 'full_name', 'last_name', 'first_name', 'patronymic',
         'legal_name', 'inn', 'kpp', 'legal_address',
         'phone', 'email', 'passport_data', 'notes', 'blacklist_flag',
-        'lmb_data',
+        'lmb_data', 'user_uid', 'lmb_full_name',
     ];
 
     public function getFullNameAttribute($value): string
