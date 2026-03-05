@@ -162,7 +162,7 @@ class ClientController extends Controller
         // Ответ 1С может быть обёрнут: {"data": {...}} или {"result": {...}}
         foreach (['data', 'result', 'response', 'user'] as $wrapper) {
             if (isset($data[$wrapper]) && is_array($data[$wrapper])
-                && (isset($data[$wrapper]['user_uid']) || isset($data[$wrapper]['User_Uid'])) {
+                && (isset($data[$wrapper]['user_uid']) || isset($data[$wrapper]['User_Uid']))) {
                 $data = $data[$wrapper];
                 break;
             }
