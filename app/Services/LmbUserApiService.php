@@ -26,7 +26,7 @@ class LmbUserApiService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.lmb_user_api.base_url', 'http://5.128.186.3:5665/lmb/hs/es'), '/');
+        $this->baseUrl = rtrim(config('services.lmb_user_api.base_url', 'http://5.128.186.3/lmb/hs/es'), '/');
         $this->loginUrl = config('services.lmb_user_api.login_url') ? rtrim(config('services.lmb_user_api.login_url'), '/') : null;
         $this->timeout = config('services.lmb_user_api.timeout', 8);
         $this->username = config('services.lmb_user_api.username') ?: null;

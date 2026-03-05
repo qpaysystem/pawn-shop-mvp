@@ -159,12 +159,42 @@ class ClientController extends Controller
             return redirect()->route('clients.show', $client)->with('error', '1С вернула ответ в неожиданном формате.');
         }
 
-        if (empty($data) || empty($data['user_uid'])) {
+        if (empty($data) || empty($data['user_uid'] ?? '')) {
+            $client->update(['lmb_data' => null]);
             return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (пустой ответ).');
         }
 
+        $data = $this->normalizeLmbUserData($data);
         $client->update(['lmb_data' => $data]);
 
         return redirect()->route('clients.show', $client)->with('success', 'Данные из 1С загружены и сохранены в карточку.');
+    }
+
+    /**
+     * Привести ключи ответа 1С к единому виду (user_uid, first_name, second_name, last_name, phone).
+     */
+    private function normalizeLmbUserData(array $data): array
+    {
+        $map = [
+            'user_uid' => ['user_uid', 'User_Uid', 'UserUid', 'userUid', 'USER_UID'],
+            'first_name' => ['first_name', 'First_Name', 'FirstName', 'firstname', 'first'],
+            'second_name' => ['second_name', 'Second_Name', 'SecondName', 'secondname', 'second'],
+            'last_name' => ['last_name', 'Last_Name', 'LastName', 'lastname', 'last'],
+            'phone' => ['phone', 'Phone', 'PhoneNumber', 'tel'],
+        ];
+        $out = [];
+        foreach ($map as $ourKey => $variants) {
+            $value = $data[$ourKey] ?? null;
+            if ($value === null || $value === '') {
+                foreach ($variants as $v) {
+                    if (isset($data[$v]) && (string) $data[$v] !== '') {
+                        $value = $data[$v];
+                        break;
+                    }
+                }
+            }
+            $out[$ourKey] = $value !== null && $value !== '' ? (string) $value : null;
+        }
+        return $out;
     }
 }
