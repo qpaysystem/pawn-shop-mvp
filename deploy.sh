@@ -41,6 +41,9 @@ $PHP artisan package:discover
 echo "3. Миграции..."
 $PHP artisan migrate --force
 
+echo "3.1. Сидер источников трафика (маркетинг)..."
+$PHP artisan db:seed --class=TrafficSourceSeeder --force 2>/dev/null || true
+
 echo "4. Очистка и пересборка кэша..."
 $PHP artisan config:clear
 $PHP artisan route:clear
