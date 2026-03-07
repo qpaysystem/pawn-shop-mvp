@@ -326,6 +326,13 @@
             </li>
 
             <li>
+                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-marketing" aria-expanded="true" aria-controls="sidebar-group-marketing"><i class="bi bi-graph-up-arrow nav-group-toggle-icon"></i><span>Маркетинг</span><i class="bi bi-chevron-down"></i></button>
+                <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-marketing">
+                    <li class="nav-item"><a class="nav-link" href="{{ route('marketing.index') }}"><i class="bi bi-bar-chart-line"></i> Маркетинг</a></li>
+                </ul>
+            </li>
+
+            <li>
                 <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-finance" aria-expanded="true" aria-controls="sidebar-group-finance"><i class="bi bi-wallet2 nav-group-toggle-icon"></i><span>Финансы</span><i class="bi bi-chevron-down"></i></button>
                 <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-finance">
                     @if(auth()->user() && auth()->user()->canProcessSales())
@@ -385,7 +392,7 @@
     <script>
       (function () {
         var STORAGE_KEY = 'sidebar-groups';
-        var ids = ['sidebar-group-clients', 'sidebar-group-finance', 'sidebar-group-settings'];
+        var ids = ['sidebar-group-clients', 'sidebar-group-marketing', 'sidebar-group-finance', 'sidebar-group-settings'];
         try {
           var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
           ids.forEach(function (id) {

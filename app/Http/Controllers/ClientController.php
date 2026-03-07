@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\TrafficSource;
 use App\Services\LmbUserApiService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -71,9 +72,13 @@ class ClientController extends Controller
             'passport_data' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:1000',
             'blacklist_flag' => 'boolean',
+            'traffic_source_id' => 'nullable|exists:traffic_sources,id',
+            'funnel_stage' => 'nullable|string|in:lead,contact,visit,deal',
         ]);
         $data['full_name'] = $this->buildFullName($data);
         $data['blacklist_flag'] = $request->boolean('blacklist_flag');
+        $data['traffic_source_id'] = $request->filled('traffic_source_id') ? $request->traffic_source_id : null;
+        $data['funnel_stage'] = $request->filled('funnel_stage') ? $request->funnel_stage : null;
         Client::create($data);
 
         return redirect()->route('clients.index')->with('success', 'Клиент создан.');
@@ -81,14 +86,15 @@ class ClientController extends Controller
 
     public function show(Client $client)
     {
-        $client->load(['pawnContracts.item', 'pawnContracts.store', 'commissionContracts.item', 'commissionContracts.store', 'purchaseContracts.item', 'purchaseContracts.store', 'callCenterContacts.store']);
+        $client->load(['trafficSource', 'pawnContracts.item', 'pawnContracts.store', 'commissionContracts.item', 'commissionContracts.store', 'purchaseContracts.item', 'purchaseContracts.store', 'callCenterContacts.store']);
 
         return view('clients.show', compact('client'));
     }
 
     public function edit(Client $client)
     {
-        return view('clients.edit', compact('client'));
+        $trafficSources = TrafficSource::orderBy('sort_order')->get();
+        return view('clients.edit', compact('client', 'trafficSources'));
     }
 
     public function update(Request $request, Client $client)
@@ -107,9 +113,13 @@ class ClientController extends Controller
             'passport_data' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:1000',
             'blacklist_flag' => 'boolean',
+            'traffic_source_id' => 'nullable|exists:traffic_sources,id',
+            'funnel_stage' => 'nullable|string|in:lead,contact,visit,deal',
         ]);
         $data['full_name'] = $this->buildFullName($data);
         $data['blacklist_flag'] = $request->boolean('blacklist_flag');
+        $data['traffic_source_id'] = $request->filled('traffic_source_id') ? $request->traffic_source_id : null;
+        $data['funnel_stage'] = $request->filled('funnel_stage') ? $request->funnel_stage : null;
         $client->update($data);
 
         return redirect()->route('clients.show', $client)->with('success', 'Клиент обновлён.');

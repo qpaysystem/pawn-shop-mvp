@@ -22,6 +22,13 @@
         @if($client->email)<p><strong>Email:</strong> {{ $client->email }}</p>@endif
         @if(!$client->isLegal() && $client->passport_data)<p><strong>Паспорт:</strong> {{ $client->passport_data }}</p>@endif
         @if($client->notes)<p><strong>Заметки:</strong> {{ $client->notes }}</p>@endif
+        @if($client->trafficSource || $client->funnel_stage)
+            <p class="mb-0">
+                <strong>Маркетинг:</strong>
+                @if($client->trafficSource)<span class="badge bg-primary">{{ $client->trafficSource->name }}</span>@endif
+                @if($client->funnel_stage)<span class="badge bg-secondary">{{ \App\Models\Client::funnelStageLabels()[$client->funnel_stage] ?? $client->funnel_stage }}</span>@endif
+            </p>
+        @endif
         @if($client->blacklist_flag)<p><span class="badge bg-danger">В чёрном списке</span></p>@endif
     </div>
 </div>

@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             KbCategorySeeder::class,
             AccountsSeeder::class,
+            TrafficSourceSeeder::class,
         ]);
     }
 }

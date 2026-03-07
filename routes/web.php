@@ -22,6 +22,7 @@ use App\Http\Controllers\ItemCategoryController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ItemStatusController;
 use App\Http\Controllers\KnowledgeBaseController;
+use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\PawnContractController;
 use App\Http\Controllers\PayrollAccrualController;
 use App\Http\Controllers\PurchaseContractController;
@@ -127,6 +128,9 @@ Route::middleware('auth')->group(function () {
     Route::get('call-center/{callCenterContact}/recording', [CallCenterController::class, 'recording'])->name('call-center.recording');
     Route::get('call-center/{callCenterContact}/recording-mts', [CallCenterController::class, 'recordingFromMts'])->name('call-center.recording-mts');
     Route::post('call-center/{callCenterContact}/transcribe', [CallCenterController::class, 'transcribeRecording'])->name('call-center.transcribe');
+
+    // Маркетинг: источники трафика, воронка, эффективность
+    Route::get('marketing', [MarketingController::class, 'index'])->name('marketing.index');
 
     // Договоры залога
     // Кассовые операции

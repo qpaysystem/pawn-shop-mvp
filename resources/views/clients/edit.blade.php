@@ -59,6 +59,26 @@
         <textarea name="passport_data" class="form-control" rows="2">{{ old('passport_data', $client->passport_data) }}</textarea>
     </div>
     <div class="mb-3"><label class="form-label">Заметки</label><textarea name="notes" class="form-control" rows="2">{{ old('notes', $client->notes) }}</textarea></div>
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label">Источник трафика</label>
+            <select name="traffic_source_id" class="form-select">
+                <option value="">— не указан —</option>
+                @foreach($trafficSources ?? [] as $ts)
+                    <option value="{{ $ts->id }}" @selected(old('traffic_source_id', $client->traffic_source_id) == $ts->id)>{{ $ts->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Этап воронки</label>
+            <select name="funnel_stage" class="form-select">
+                <option value="">— не указан —</option>
+                @foreach(\App\Models\Client::funnelStageLabels() as $code => $label)
+                    <option value="{{ $code }}" @selected(old('funnel_stage', $client->funnel_stage) === $code)>{{ $label }}</option>
+                @endforeach
+            </select>
+        </div>
+    </div>
     <div class="mb-3 form-check"><input type="checkbox" name="blacklist_flag" class="form-check-input" value="1" {{ old('blacklist_flag', $client->blacklist_flag) ? 'checked' : '' }}><label class="form-check-label">Чёрный список</label></div>
     <button type="submit" class="btn btn-primary">Сохранить</button>
     <a href="{{ route('clients.show', $client) }}" class="btn btn-secondary">Отмена</a>

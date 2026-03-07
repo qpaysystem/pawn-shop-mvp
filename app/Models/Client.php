@@ -13,11 +13,18 @@ class Client extends Model
     public const TYPE_INDIVIDUAL = 'individual';
     public const TYPE_LEGAL = 'legal';
 
+    /** Этапы воронки для маркетинга */
+    public const FUNNEL_LEAD = 'lead';
+    public const FUNNEL_CONTACT = 'contact';
+    public const FUNNEL_VISIT = 'visit';
+    public const FUNNEL_DEAL = 'deal';
+
     protected $fillable = [
         'client_type', 'full_name', 'last_name', 'first_name', 'patronymic',
         'legal_name', 'inn', 'kpp', 'legal_address',
         'phone', 'email', 'passport_data', 'notes', 'blacklist_flag',
         'lmb_data', 'user_uid', 'lmb_full_name',
+        'traffic_source_id', 'funnel_stage',
     ];
 
     public function getFullNameAttribute($value): string
@@ -66,6 +73,21 @@ class Client extends Model
     public function callCenterContacts()
     {
         return $this->hasMany(CallCenterContact::class);
+    }
+
+    public function trafficSource()
+    {
+        return $this->belongsTo(TrafficSource::class);
+    }
+
+    public static function funnelStageLabels(): array
+    {
+        return [
+            self::FUNNEL_LEAD => 'Лид / Обращение',
+            self::FUNNEL_CONTACT => 'Контакт',
+            self::FUNNEL_VISIT => 'Визит',
+            self::FUNNEL_DEAL => 'Сделка',
+        ];
     }
 
     public function cashDocuments()
