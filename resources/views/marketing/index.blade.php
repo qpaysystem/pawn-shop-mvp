@@ -173,7 +173,7 @@
                         <tbody>
                             @foreach($dgisStats as $s)
                             <tr>
-                                <td>{{ $s->date->format('d.m.Y') }}</td>
+                                <td>{{ \Carbon\Carbon::parse($s->date)->format('d.m.Y') }}</td>
                                 <td class="text-end">{{ $s->views_count }}</td>
                                 <td class="text-end">{{ $s->calls_count }}</td>
                                 <td class="small text-muted">{{ Str::limit($s->comment, 40) }}</td>
