@@ -54,4 +54,15 @@ return [
         'username' => env('LMB_USER_API_USERNAME', 'UserWebServis'),
         'password' => env('LMB_USER_API_PASSWORD', 'UserWebServis'),
     ],
+    // Пользователь 1С (логин в конфигурацию) — для веб-сервисов/интеграций, требующих авторизацию пользователя 1С
+    'lmb_1c_user' => [
+        'username' => env('LMB_1C_USER', ''),
+        'password' => env('LMB_1C_PASSWORD', ''),
+    ],
+    // 2ГИС: данные карточки организации (рейтинг, отзывы). Ключ и ID филиала — в Platform Manager / карточке в 2ГИС.
+    'dgis' => [
+        'api_key' => env('DGIS_API_KEY', ''),
+        'branch_id' => env('DGIS_BRANCH_ID', ''),
+        'api_url' => 'https://catalog.api.2gis.com/3.0/items/byid',
+    ],
 ];

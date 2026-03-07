@@ -3,14 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\Marketing2GisStat;
 use App\Models\TrafficSource;
+use App\Services\TwoGisApiService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
-/** Маркетинг: источники трафика, воронка, эффективность каналов. */
+/** Маркетинг: источники трафика, воронка, эффективность каналов, данные 2ГИС. */
 class MarketingController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, TwoGisApiService $twoGis): View
     {
         $sources = TrafficSource::orderBy('sort_order')->get();
         $dateFrom = $request->get('date_from');
@@ -69,6 +72,21 @@ class MarketingController extends Controller
                 ->orWhereHas('purchaseContracts');
         })->count();
 
+        // Данные из 2ГИС: карточка организации (кэш 1 ч) + статистика просмотров/звонков по дням
+        $dgisBranch = $twoGis->getBranchInfo();
+        $dgisStatsQuery = Marketing2GisStat::query();
+        if ($dateFrom) {
+            $dgisStatsQuery->whereDate('date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $dgisStatsQuery->whereDate('date', '<=', $dateTo);
+        }
+        $dgisStats = $dgisStatsQuery->orderByDesc('date')->limit(365)->get();
+        $dgisTotals = [
+            'views' => $dgisStats->sum('views_count'),
+            'calls' => $dgisStats->sum('calls_count'),
+        ];
+
         return view('marketing.index', [
             'sources' => $sources,
             'bySource' => $bySource,
@@ -79,6 +97,38 @@ class MarketingController extends Controller
             'clientsWithAnyContract' => $clientsWithAnyContract,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
+            'dgisBranch' => $dgisBranch,
+            'dgisStats' => $dgisStats,
+            'dgisTotals' => $dgisTotals,
         ]);
+    }
+
+    /** Обновить данные из 2ГИС (сброс кэша и редирект). */
+    public function refresh2Gis(TwoGisApiService $twoGis): RedirectResponse
+    {
+        $twoGis->clearCache();
+        return redirect()->route('marketing.index')->with('success', 'Кэш 2ГИС сброшен. Данные подтянутся при открытии раздела.');
+    }
+
+    /** Сохранить запись статистики 2ГИС (просмотры/звонки за день). */
+    public function store2GisStat(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'date' => 'required|date',
+            'views_count' => 'nullable|integer|min:0',
+            'calls_count' => 'nullable|integer|min:0',
+            'comment' => 'nullable|string|max:500',
+        ]);
+        Marketing2GisStat::updateOrCreate(
+            ['date' => $validated['date']],
+            [
+                'views_count' => (int) ($validated['views_count'] ?? 0),
+                'calls_count' => (int) ($validated['calls_count'] ?? 0),
+                'comment' => $validated['comment'] ?? null,
+            ]
+        );
+        return redirect()->route('marketing.index', $request->only(['date_from', 'date_to']) + ['dgis' => '1'])
+            ->with('success', 'Запись по 2ГИС сохранена.')
+            ->withFragment('dgis');
     }
 }

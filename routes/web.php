@@ -129,8 +129,10 @@ Route::middleware('auth')->group(function () {
     Route::get('call-center/{callCenterContact}/recording-mts', [CallCenterController::class, 'recordingFromMts'])->name('call-center.recording-mts');
     Route::post('call-center/{callCenterContact}/transcribe', [CallCenterController::class, 'transcribeRecording'])->name('call-center.transcribe');
 
-    // Маркетинг: источники трафика, воронка, эффективность
+    // Маркетинг: источники трафика, воронка, эффективность, 2ГИС
     Route::get('marketing', [MarketingController::class, 'index'])->name('marketing.index');
+    Route::post('marketing/refresh-2gis', [MarketingController::class, 'refresh2Gis'])->name('marketing.refresh-2gis');
+    Route::post('marketing/2gis-stats', [MarketingController::class, 'store2GisStat'])->name('marketing.2gis-stats.store');
 
     // Договоры залога
     // Кассовые операции
