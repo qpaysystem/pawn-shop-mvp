@@ -25,7 +25,11 @@ class MtsVpbxDebugResponse extends Command
         }
 
         $opts = ['curl' => [CURLOPT_SSL_CIPHER_LIST => 'DEFAULT@SECLEVEL=1']];
-        $usesAc20 = app(MtsVpbxService::class)->usesAc20Api();
+        $mts = app(MtsVpbxService::class);
+        $usesAc20 = $mts->usesAc20Api();
+        $apiCfg = strtolower((string) config('services.mts_vpbx.api', 'auto'));
+        $this->line('Конфиг: MTS_TELEPHONY_API='.$apiCfg.' → запрос пойдёт в '.($usesAc20 ? 'AC20 (aa.mts.ru)' : 'VPBX (vpbx.mts.ru)').'.');
+        $this->line('');
 
         if ($usesAc20) {
             return $this->debugAc20($opts);
@@ -80,7 +84,10 @@ class MtsVpbxDebugResponse extends Command
 
         $this->line('Body: '.substr($response->body(), 0, 500).(strlen($response->body()) > 500 ? '...' : ''));
         $this->line('');
-        $this->line('Подсказка: ЛК vpbx.mts.ru → активация API, токен в MTS_VPBX_PASSWORD, заголовок X-AUTH-TOKEN.');
+        $jwtHint = str_starts_with(ltrim($token), 'eyJ')
+            ? ' Токен похож на JWT (AC20): для aa.mts.ru задайте в .env MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр) и при необходимости MTS_TELEPHONY_API=ac20 (или обновите проект — режим auto подхватит AC20 при заполненных домене и транке).'
+            : '';
+        $this->line('Подсказка: ЛК vpbx.mts.ru → активация API, токен в MTS_VPBX_PASSWORD, заголовок X-AUTH-TOKEN.'.$jwtHint);
 
         return self::FAILURE;
     }
