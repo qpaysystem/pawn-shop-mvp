@@ -20,7 +20,7 @@ class SyncMtsVpbxCalls extends Command
         $service = app(MtsVpbxService::class);
         if (! $service->isConfigured()) {
             $this->error($service->usesAc20Api()
-                ? 'MTS AC20: MTS_VPBX_PASSWORD (JWT), MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр), MTS_TELEPHONY_API=ac20'
+                ? 'MTS AC20: MTS_VPBX_PASSWORD (JWT), MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр). Режим auto подхватывает AC20 при заполненных домене и транке.'
                 : 'MTS VPBX: MTS_VPBX_URL и MTS_VPBX_PASSWORD в .env');
 
             return self::FAILURE;
@@ -36,7 +36,9 @@ class SyncMtsVpbxCalls extends Command
         $calls = $service->fetchCalls($dateFrom, $dateTo);
 
         if ($calls === []) {
-            $this->warn('Звонков не получено. Проверьте URL и пароль API, а также формат ответа vpbx.mts.ru.');
+            $this->warn($service->usesAc20Api()
+                ? 'Звонков не получено. Проверьте JWT, Domain, TrunkId: php artisan mts:debug-response'
+                : 'Звонков не получено. Проверьте URL и пароль API, а также формат ответа vpbx.mts.ru.');
 
             return self::SUCCESS;
         }

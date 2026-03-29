@@ -74,8 +74,8 @@ class CallCenterController extends Controller
         $service = app(MtsVpbxService::class);
         if (! $service->isConfigured()) {
             $hint = $service->usesAc20Api()
-                ? 'Для AC20: MTS_TELEPHONY_API=ac20, MTS_VPBX_PASSWORD (JWT), MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр).'
-                : 'Укажите MTS_VPBX_URL и MTS_VPBX_PASSWORD в .env.';
+                ? 'Для AC20: MTS_VPBX_PASSWORD (JWT), MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр). Режим: MTS_TELEPHONY_API=auto (по умолчанию) или ac20.'
+                : 'Укажите MTS_VPBX_URL и MTS_VPBX_PASSWORD в .env. Для AC20 добавьте домен и транк или явно MTS_TELEPHONY_API=vpbx.';
 
             return redirect()->route('call-center.index')->with('error', 'Телефония MTS не настроена. '.$hint);
         }

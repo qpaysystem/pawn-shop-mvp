@@ -35,7 +35,7 @@ class MtsVpbxService
         $this->baseUrl = rtrim((string) ($cfg['url'] ?? 'https://vpbx.mts.ru'), '/');
         $this->login = (string) ($cfg['login'] ?? '');
         $this->token = (string) ($cfg['password'] ?? '');
-        $this->api = strtolower((string) ($cfg['api'] ?? 'vpbx'));
+        $this->api = strtolower((string) ($cfg['api'] ?? 'auto'));
         $this->ac20BaseUrl = rtrim((string) ($cfg['ac20_base_url'] ?? 'https://aa.mts.ru/api/ac20'), '/');
         $this->ac20Domain = trim((string) ($cfg['ac20_domain'] ?? ''));
         $this->ac20TrunkId = preg_replace('/\D/', '', (string) ($cfg['ac20_trunk_id'] ?? ''));
@@ -43,7 +43,14 @@ class MtsVpbxService
 
     public function usesAc20Api(): bool
     {
-        return $this->api === 'ac20';
+        if ($this->api === 'ac20') {
+            return true;
+        }
+        if ($this->api === 'vpbx') {
+            return false;
+        }
+        // auto (по умолчанию) и прочие значения: AC20 только при полном наборе полей ЛК aa.mts.ru
+        return $this->ac20Domain !== '' && strlen($this->ac20TrunkId) === 10;
     }
 
     /** Сообщение для UI/логов, если fetchCalls (AC20) вернул пустой список. */

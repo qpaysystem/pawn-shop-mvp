@@ -24,10 +24,10 @@ class MtsVpbxDebugResponse extends Command
             return self::FAILURE;
         }
 
-        $api = strtolower((string) config('services.mts_vpbx.api', 'vpbx'));
         $opts = ['curl' => [CURLOPT_SSL_CIPHER_LIST => 'DEFAULT@SECLEVEL=1']];
+        $usesAc20 = app(MtsVpbxService::class)->usesAc20Api();
 
-        if ($api === 'ac20') {
+        if ($usesAc20) {
             return $this->debugAc20($opts);
         }
 

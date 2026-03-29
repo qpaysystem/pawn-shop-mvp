@@ -41,8 +41,8 @@ return [
         'api_key' => env('SERPER_API_KEY', ''),
     ],
     'mts_vpbx' => [
-        // vpbx — старый ЛК vpbx.mts.ru (X-AUTH-TOKEN). ac20 — Автосекретарь 2.0: https://aa.mts.ru/api/ac20/index.html (Bearer JWT)
-        'api' => env('MTS_TELEPHONY_API', 'vpbx'),
+        // vpbx — ЛК vpbx.mts.ru (X-AUTH-TOKEN). ac20 — Автосекретарь 2.0 (Bearer JWT). auto — AC20, если заданы MTS_AC20_DOMAIN и MTS_AC20_TRUNK_ID (10 цифр), иначе VPBX
+        'api' => strtolower((string) env('MTS_TELEPHONY_API', 'auto')),
         'url' => env('MTS_VPBX_URL', 'https://vpbx.mts.ru'),
         'login' => env('MTS_VPBX_LOGIN', ''),
         'password' => env('MTS_VPBX_PASSWORD', ''),
