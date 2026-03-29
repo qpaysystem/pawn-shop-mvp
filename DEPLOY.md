@@ -502,6 +502,10 @@ export PHP=/usr/bin/php
 ```
 Либо выполните команды вручную, подставляя `/usr/bin/php` вместо `php` (см. вариант Б выше). В `deploy.sh` добавлен авто-поиск рабочего PHP (`/usr/bin/php`, `/usr/local/bin/php`), поэтому после обновления кода скрипт сам подхватит нужный интерпретатор.
 
+Удалите устаревший **alias** в `~/.bash_profile` / `~/.bashrc` (часто `alias php='/opt/php56/bin/php'`), иначе в новой SSH-сессии снова будет ломаться команда `php`. Замените на рабочий путь, например: `alias php='/usr/bin/php'`.
+
+**Если `composer install` ругается на PHP 8.3 при установленном PHP 8.2 на хостинге:** в проекте зафиксирован `maennchen/zipstream-php` ~3.1.2 (совместим с PHP 8.2). Выполните `git pull` и снова `./deploy.sh` с `export PHP=/usr/bin/php`.
+
 ---
 
 ## Другой хостинг (не Timeweb)
