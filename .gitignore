@@ -31,3 +31,5 @@ public_html
 composer.phar
 # Личный скрипт удалённого деплоя (копия с deploy-remote.example.sh)
 scripts/deploy-remote.sh
+scripts/push-mts-env-to-server.sh
+mts-env.sync.txt

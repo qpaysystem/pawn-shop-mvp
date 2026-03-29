@@ -159,6 +159,32 @@
       }
     },
     {
+      "label": "MTS: export .env фрагмент (в терминал)",
+      "type": "shell",
+      "command": "bash scripts/export-mts-env-for-server.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "MTS: export в mts-env.sync.txt (не коммитить)",
+      "type": "shell",
+      "command": "bash scripts/export-mts-env-for-server.sh > mts-env.sync.txt && echo 'Записано в mts-env.sync.txt (в .gitignore)'",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
       "label": "Deploy: SSH — git pull + deploy.sh",
       "type": "shell",
       "command": "ssh ${input:deploySshTarget} 'cd ${input:deployRemoteDir} && git pull origin main && export PHP=/usr/bin/php && ./deploy.sh'",
