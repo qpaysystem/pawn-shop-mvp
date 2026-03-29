@@ -159,6 +159,18 @@ class MtsVpbxDebugResponse extends Command
         if ($response->successful()) {
             $this->info('Успех. Ответ API (статистика вызовов):');
             $this->line($response->body());
+            $decoded = $response->json();
+            $svc = app(MtsVpbxService::class);
+            $sum = $svc->summarizeAc20StatisticsPayload($decoded);
+            $this->line('');
+            if (! $sum['unwrap_ok']) {
+                $this->warn('JSON не распознан как список звонков (см. unwrapAc20StatisticsRows в MtsVpbxService).');
+            } else {
+                $this->line('Записей в ответе: '.$sum['rows'].', распознано для CRM: '.$sum['parsed'].'.');
+                if (($sum['rows'] ?? 0) > 0 && $sum['parsed'] === 0) {
+                    $this->warn('Поля в JSON не совпадают с ожидаемыми (callId, startTime и т.д.) — доработайте normalizeAc20StatisticsRow.');
+                }
+            }
 
             return self::SUCCESS;
         }

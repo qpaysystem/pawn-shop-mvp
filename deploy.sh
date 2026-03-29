@@ -53,8 +53,8 @@ $PHP artisan config:cache
 $PHP artisan route:cache
 $PHP artisan view:cache
 
-echo "5. Симлинк storage (если ещё нет)..."
-$PHP artisan storage:link 2>/dev/null || true
+echo "5. Симлинк public/storage..."
+$PHP artisan storage:link --force
 
 echo "6. Каталоги для загрузок..."
 mkdir -p storage/app/public/items

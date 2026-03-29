@@ -26,6 +26,9 @@ class MtsVpbxService
 
     private string $ac20TrunkId;
 
+    /** Подсказка после последнего запроса AC20 statistics (ошибка HTTP / формат / парсинг строк). */
+    private ?string $lastAc20StatisticsHint = null;
+
     public function __construct()
     {
         $cfg = config('services.mts_vpbx', []);
@@ -41,6 +44,12 @@ class MtsVpbxService
     public function usesAc20Api(): bool
     {
         return $this->api === 'ac20';
+    }
+
+    /** Сообщение для UI/логов, если fetchCalls (AC20) вернул пустой список. */
+    public function lastAc20StatisticsHint(): ?string
+    {
+        return $this->lastAc20StatisticsHint;
     }
 
     public function isConfigured(): bool
@@ -201,6 +210,8 @@ class MtsVpbxService
      */
     private function fetchCallsAc20(\DateTimeInterface $dateFrom, \DateTimeInterface $dateTo): array
     {
+        $this->lastAc20StatisticsHint = null;
+
         $url = $this->ac20BaseUrl.'/trunks/statistics';
         $begin = $dateFrom->format('Y-m-d\TH:i:s');
         $end = $dateTo->format('Y-m-d\TH:i:s');
@@ -223,17 +234,26 @@ class MtsVpbxService
                 ->get($url, $params);
 
             if (! $response->successful()) {
+                $snippet = substr($response->body(), 0, 400);
                 Log::warning('MtsVpbxService AC20: statistics request failed', [
                     'status' => $response->status(),
-                    'body' => substr($response->body(), 0, 500),
+                    'body' => $snippet,
                 ]);
+                $this->lastAc20StatisticsHint = 'Запрос /trunks/statistics: HTTP '.$response->status().'. '.($snippet !== '' ? 'Ответ: '.$snippet : 'Пустой ответ.');
+
                 break;
             }
-            $rows = $response->json();
-            if (! is_array($rows)) {
+            $decoded = $response->json();
+            $rows = $this->unwrapAc20StatisticsRows($decoded);
+            if ($rows === null) {
+                $raw = substr($response->body(), 0, 500);
+                Log::warning('MtsVpbxService AC20: statistics JSON не массив вызовов', ['sample' => $raw]);
+                $this->lastAc20StatisticsHint = 'Ответ API не похож на массив звонков. Начало тела: '.$raw;
+
                 break;
             }
             $batch = 0;
+            $parsedInPage = 0;
             foreach ($rows as $row) {
                 if (! is_array($row)) {
                     continue;
@@ -241,8 +261,12 @@ class MtsVpbxService
                 $item = $this->normalizeAc20StatisticsRow($row);
                 if ($item !== null) {
                     $all[] = $item;
+                    $parsedInPage++;
                 }
                 $batch++;
+            }
+            if ($offset === 0 && $batch > 0 && $parsedInPage === 0) {
+                $this->lastAc20StatisticsHint = 'API вернул '.$batch.' запис(ей), но ни одна не распознана (нужны callId и время начала). См. php artisan mts:debug-response --days=7';
             }
             if ($batch < $limit) {
                 break;
@@ -254,6 +278,41 @@ class MtsVpbxService
     }
 
     /**
+     * Развернуть тело ответа /trunks/statistics в список объектов CallStatistics.
+     *
+     * @return list<array<string, mixed>>|null null — не удалось интерпретировать
+     */
+    private function unwrapAc20StatisticsRows(mixed $decoded): ?array
+    {
+        if (! is_array($decoded)) {
+            return null;
+        }
+        if ($decoded === []) {
+            return [];
+        }
+        if (array_is_list($decoded)) {
+            return $decoded;
+        }
+        foreach (['data', 'items', 'calls', 'statistics', 'result', 'value', 'content'] as $key) {
+            if (! isset($decoded[$key]) || ! is_array($decoded[$key])) {
+                continue;
+            }
+            $inner = $decoded[$key];
+            if (array_is_list($inner)) {
+                return $inner;
+            }
+            if (! array_is_list($inner) && $this->arrayGet($inner, 'callId') !== null) {
+                return [$inner];
+            }
+        }
+        if ($this->arrayGet($decoded, 'callId') !== null) {
+            return [$decoded];
+        }
+
+        return null;
+    }
+
+    /**
      * Нормализация строки CallStatistics (AC20).
      *
      * @param  array<string, mixed>  $row
@@ -261,13 +320,20 @@ class MtsVpbxService
      */
     private function normalizeAc20StatisticsRow(array $row): ?array
     {
-        $callId = $this->arrayGet($row, 'callId');
+        $callId = $this->arrayGet($row, 'callId')
+            ?? $this->arrayGet($row, 'CallId')
+            ?? $this->arrayGet($row, 'id')
+            ?? $this->arrayGet($row, 'call_id');
         if ($callId === null || $callId === '') {
             return null;
         }
         $callIdStr = (string) $callId;
 
-        $start = $this->arrayGet($row, 'startTime');
+        $start = $this->arrayGet($row, 'startTime')
+            ?? $this->arrayGet($row, 'StartTime')
+            ?? $this->arrayGet($row, 'beginTime')
+            ?? $this->arrayGet($row, 'start')
+            ?? $this->arrayGet($row, 'date');
         if ($start === null || $start === '') {
             return null;
         }
@@ -620,5 +686,26 @@ class MtsVpbxService
         }
 
         return $response->body();
+    }
+
+    /**
+     * Для mts:debug-response: сколько записей после unwrap и сколько распарсилось в CRM.
+     *
+     * @return array{rows: int|null, parsed: int, unwrap_ok: bool}
+     */
+    public function summarizeAc20StatisticsPayload(mixed $decoded): array
+    {
+        $rows = $this->unwrapAc20StatisticsRows($decoded);
+        if ($rows === null) {
+            return ['rows' => null, 'parsed' => 0, 'unwrap_ok' => false];
+        }
+        $parsed = 0;
+        foreach ($rows as $row) {
+            if (is_array($row) && $this->normalizeAc20StatisticsRow($row) !== null) {
+                $parsed++;
+            }
+        }
+
+        return ['rows' => count($rows), 'parsed' => $parsed, 'unwrap_ok' => true];
     }
 }

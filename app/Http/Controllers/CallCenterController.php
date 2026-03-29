@@ -86,6 +86,7 @@ class CallCenterController extends Controller
         $dateTo = now();
 
         $calls = $service->fetchCalls($dateFrom, $dateTo);
+        $ac20Hint = $service->usesAc20Api() ? $service->lastAc20StatisticsHint() : null;
         $created = 0;
         $skipped = 0;
 
@@ -141,11 +142,22 @@ class CallCenterController extends Controller
             $created++;
         }
 
-        $message = $created > 0 || $skipped > 0
-            ? "Загружено звонков MTS: создано {$created}, пропущено дублей {$skipped}."
-            : 'Звонков не получено. Проверьте токен и для AC20 — домен и TrunkId. Команда: php artisan mts:debug-response';
+        if ($created > 0 || $skipped > 0) {
+            $message = "Загружено звонков MTS: создано {$created}, пропущено дублей {$skipped}.";
+            $flashType = 'success';
+        } elseif ($service->usesAc20Api()) {
+            if ($ac20Hint !== null) {
+                $message = 'Звонков не получено. '.$ac20Hint.' Проверка: php artisan mts:debug-response --days='.$days;
+            } else {
+                $message = 'За выбранный период API вернул 0 звонков (или все уже в базе). Попробуйте больше дней на форме загрузки или: php artisan mts:debug-response --days=30';
+            }
+            $flashType = 'error';
+        } else {
+            $message = 'Звонков не получено. Проверьте MTS_VPBX_PASSWORD и URL. Команда: php artisan mts:debug-response';
+            $flashType = 'error';
+        }
 
-        return redirect()->route('call-center.index')->with($created > 0 ? 'success' : 'error', $message);
+        return redirect()->route('call-center.index')->with($flashType, $message);
     }
 
     /** Загрузить записи разговоров за последние 7 дней (звонки с ext_tracking_id, у которых ещё нет recording_path). */
