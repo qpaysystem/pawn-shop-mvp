@@ -1,8 +1,8 @@
 <?php
 
-use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\LandingController;
 use App\Http\Controllers\AcceptItemController;
+use App\Http\Controllers\AdminSectionController;
+use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\BankAccountController;
 use App\Http\Controllers\BankStatementController;
 use App\Http\Controllers\BrandController;
@@ -11,10 +11,10 @@ use App\Http\Controllers\CashController;
 use App\Http\Controllers\ChartOfAccountsController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommissionContractController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentLedgerEntryController;
 use App\Http\Controllers\DocumentLedgerTemplateController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ExpenseTypeController;
@@ -22,11 +22,12 @@ use App\Http\Controllers\ItemCategoryController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ItemStatusController;
 use App\Http\Controllers\KnowledgeBaseController;
+use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\PawnContractController;
 use App\Http\Controllers\PayrollAccrualController;
-use App\Http\Controllers\PurchaseContractController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PurchaseContractController;
 use App\Http\Controllers\StorageLocationController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\UserController;
@@ -34,10 +35,11 @@ use Illuminate\Support\Facades\Route;
 
 // Раздача файлов из storage (если симлинк public/storage не работает — как на части хостингов)
 Route::get('storage/{path}', function (string $path) {
-    $fullPath = storage_path('app/public/' . $path);
+    $fullPath = storage_path('app/public/'.$path);
     if (! is_file($fullPath) || ! str_starts_with(realpath($fullPath), realpath(storage_path('app/public')))) {
         abort(404);
     }
+
     return response()->file($fullPath);
 })->where('path', '(.*)')->name('storage.serve');
 
@@ -90,6 +92,11 @@ Route::post('logout', [LoginController::class, 'logout'])->name('logout')->middl
 
 Route::middleware('auth')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::get('section/clients', [AdminSectionController::class, 'clients'])->name('section.clients');
+    Route::get('section/marketing', [AdminSectionController::class, 'marketing'])->name('section.marketing');
+    Route::get('section/finance', [AdminSectionController::class, 'finance'])->name('section.finance');
+    Route::get('section/settings', [AdminSectionController::class, 'settings'])->name('section.settings');
     Route::get('appraiser', function () {
         return view('appraiser.home');
     })->name('appraiser.home');
@@ -133,6 +140,7 @@ Route::middleware('auth')->group(function () {
     Route::get('marketing', [MarketingController::class, 'index'])->name('marketing.index');
     Route::post('marketing/refresh-2gis', [MarketingController::class, 'refresh2Gis'])->name('marketing.refresh-2gis');
     Route::post('marketing/2gis-stats', [MarketingController::class, 'store2GisStat'])->name('marketing.2gis-stats.store');
+    Route::post('marketing/2gis-stats/import', [MarketingController::class, 'import2GisStats'])->name('marketing.2gis-stats.import');
 
     // Договоры залога
     // Кассовые операции

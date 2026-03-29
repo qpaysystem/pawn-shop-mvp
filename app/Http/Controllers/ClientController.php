@@ -21,7 +21,11 @@ class ClientController extends Controller
                     ->orWhere('phone', 'like', "%{$q}%")
                     ->orWhere('email', 'like', "%{$q}%")
                     ->orWhere('legal_name', 'like', "%{$q}%")
-                    ->orWhere('inn', 'like', "%{$q}%");
+                    ->orWhere('inn', 'like', "%{$q}%")
+                    ->orWhere('passport_data', 'like', "%{$q}%")
+                    ->orWhere('lmb_identity_document_type', 'like', "%{$q}%")
+                    ->orWhere('lmb_passport_issued_by', 'like', "%{$q}%")
+                    ->orWhere('lmb_registration_address', 'like', "%{$q}%");
             });
         }
         if ($request->filled('blacklist')) {
@@ -79,6 +83,7 @@ class ClientController extends Controller
         $data['blacklist_flag'] = $request->boolean('blacklist_flag');
         $data['traffic_source_id'] = $request->filled('traffic_source_id') ? $request->traffic_source_id : null;
         $data['funnel_stage'] = $request->filled('funnel_stage') ? $request->funnel_stage : null;
+        $data['phone_key'] = Client::phoneToKey($data['phone'] ?? null);
         Client::create($data);
 
         return redirect()->route('clients.index')->with('success', 'Клиент создан.');
@@ -94,6 +99,7 @@ class ClientController extends Controller
     public function edit(Client $client)
     {
         $trafficSources = TrafficSource::orderBy('sort_order')->get();
+
         return view('clients.edit', compact('client', 'trafficSources'));
     }
 
@@ -108,7 +114,7 @@ class ClientController extends Controller
             'inn' => 'nullable|string|max:12',
             'kpp' => 'nullable|string|max:9',
             'legal_address' => 'nullable|string|max:500',
-            'phone' => 'required|string|max:50|unique:clients,phone,' . $client->id,
+            'phone' => 'required|string|max:50|unique:clients,phone,'.$client->id,
             'email' => 'nullable|email|max:255',
             'passport_data' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:1000',
@@ -120,6 +126,7 @@ class ClientController extends Controller
         $data['blacklist_flag'] = $request->boolean('blacklist_flag');
         $data['traffic_source_id'] = $request->filled('traffic_source_id') ? $request->traffic_source_id : null;
         $data['funnel_stage'] = $request->filled('funnel_stage') ? $request->funnel_stage : null;
+        $data['phone_key'] = Client::phoneToKey($data['phone'] ?? null);
         $client->update($data);
 
         return redirect()->route('clients.show', $client)->with('success', 'Клиент обновлён.');
@@ -130,6 +137,7 @@ class ClientController extends Controller
         if (($data['client_type'] ?? '') === Client::TYPE_LEGAL && ! empty(trim($data['legal_name'] ?? ''))) {
             return trim($data['legal_name']);
         }
+
         return trim(implode(' ', array_filter([
             $data['last_name'] ?? '',
             $data['first_name'] ?? '',
@@ -158,6 +166,7 @@ class ClientController extends Controller
 
         if ($data === null) {
             \Illuminate\Support\Facades\Log::warning('ClientController::syncLmb получил null от LmbUserApiService — на сервере старая версия кода. Нужен git pull и ./deploy.sh.');
+
             return redirect()->route('clients.show', $client)->with('error', 'Ошибка 1С: устаревший код. На сервере выполните: cd ~/pawn-shop-mvp && git pull origin main && ./deploy.sh. В .env должно быть: LMB_USER_API_URL=http://5.128.186.3/lmb/hs/es (без :5665). Затем: php artisan config:clear.');
         }
 
@@ -201,6 +210,7 @@ class ClientController extends Controller
         if (empty($data) || empty($data['user_uid'] ?? '')) {
             $client->update(['lmb_data' => null, 'user_uid' => null, 'lmb_full_name' => null]);
             \Illuminate\Support\Facades\Log::info('syncLmb: пустой ответ или нет user_uid/ID', ['keys' => array_keys($data)]);
+
             return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (пустой ответ). Проверьте в storage/logs/laravel.log записи syncLmb и LmbUserApiService — там видно, что вернула 1С.');
         }
 
@@ -211,6 +221,7 @@ class ClientController extends Controller
         $data = $this->normalizeLmbUserData($data);
         if (empty($data['user_uid'])) {
             $client->update(['lmb_data' => null, 'user_uid' => null, 'lmb_full_name' => null]);
+
             return redirect()->route('clients.show', $client)->with('error', 'В 1С по этому телефону контрагент не найден (нет кода user_uid в ответе).');
         }
         $client->update([
@@ -230,6 +241,7 @@ class ClientController extends Controller
             $key = trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $k));
             $out[$key] = is_array($v) ? $this->cleanLmbDataKeys($v) : $v;
         }
+
         return $out;
     }
 
@@ -268,6 +280,7 @@ class ClientController extends Controller
             }
             $out[$ourKey] = $value !== null && $value !== '' ? (string) $value : null;
         }
+
         return $out;
     }
 }

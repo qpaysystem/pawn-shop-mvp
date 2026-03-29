@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Marketing2GisStat;
 use App\Models\TrafficSource;
 use App\Services\TwoGisApiService;
+use App\Services\TwoGisStatsImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -72,8 +73,8 @@ class MarketingController extends Controller
                 ->orWhereHas('purchaseContracts');
         })->count();
 
-        // Данные из 2ГИС: карточка организации (кэш 1 ч) + статистика просмотров/звонков по дням
-        $dgisBranch = $twoGis->getBranchInfo();
+        // Данные из 2ГИС: карточки филиалов (кэш 1 ч) + статистика просмотров/звонков по дням
+        $dgisBranches = $twoGis->getBranchesInfo();
         $dgisStatsQuery = Marketing2GisStat::query();
         if ($dateFrom) {
             $dgisStatsQuery->whereDate('date', '>=', $dateFrom);
@@ -97,7 +98,7 @@ class MarketingController extends Controller
             'clientsWithAnyContract' => $clientsWithAnyContract,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
-            'dgisBranch' => $dgisBranch,
+            'dgisBranches' => $dgisBranches,
             'dgisStats' => $dgisStats,
             'dgisTotals' => $dgisTotals,
         ]);
@@ -107,6 +108,7 @@ class MarketingController extends Controller
     public function refresh2Gis(TwoGisApiService $twoGis): RedirectResponse
     {
         $twoGis->clearCache();
+
         return redirect()->route('marketing.index')->with('success', 'Кэш 2ГИС сброшен. Данные подтянутся при открытии раздела.');
     }
 
@@ -127,8 +129,40 @@ class MarketingController extends Controller
                 'comment' => $validated['comment'] ?? null,
             ]
         );
+
         return redirect()->route('marketing.index', $request->only(['date_from', 'date_to']) + ['dgis' => '1'])
             ->with('success', 'Запись по 2ГИС сохранена.')
+            ->withFragment('dgis');
+    }
+
+    /** Импорт статистики 2ГИС из xlsx (pagevisits-daily, connections-daily из личного кабинета). */
+    public function import2GisStats(Request $request, TwoGisStatsImportService $import): RedirectResponse
+    {
+        $request->validate([
+            'pagevisits_daily' => 'nullable|file|mimes:xlsx',
+            'connections_daily' => 'nullable|file|mimes:xlsx',
+        ], [
+            'pagevisits_daily.mimes' => 'Файл просмотров должен быть в формате xlsx.',
+            'connections_daily.mimes' => 'Файл звонков должен быть в формате xlsx.',
+        ]);
+
+        if (! $request->hasFile('pagevisits_daily') && ! $request->hasFile('connections_daily')) {
+            return redirect()->route('marketing.index', ['dgis' => '1'])->withFragment('dgis')
+                ->with('error', 'Загрузите хотя бы один файл: pagevisits-daily.xlsx и/или connections-daily.xlsx.');
+        }
+
+        $result = $import->import(
+            $request->file('pagevisits_daily'),
+            $request->file('connections_daily')
+        );
+
+        $message = 'Импортировано записей: '.$result['imported'].'.';
+        if (! empty($result['errors'])) {
+            $message .= ' Ошибки: '.implode('; ', $result['errors']);
+        }
+
+        return redirect()->route('marketing.index', $request->only(['date_from', 'date_to']) + ['dgis' => '1'])
+            ->with($result['imported'] > 0 ? 'success' : 'error', $message)
             ->withFragment('dgis');
     }
 }

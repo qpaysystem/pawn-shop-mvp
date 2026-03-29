@@ -12,8 +12,8 @@ class Item extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'description', 'category_id', 'brand_id', 'store_id',
-        'storage_location_id', 'status_id', 'barcode', 'photos',
+        'name', 'description', 'metal', 'sample', 'weight_grams', 'category_id', 'brand_id', 'store_id',
+        'storage_location_id', 'status_id', 'barcode', 'lmb_ref', 'photos',
         'initial_price', 'current_price',
     ];
 
@@ -23,6 +23,7 @@ class Item extends Model
             'photos' => 'array',
             'initial_price' => 'decimal:2',
             'current_price' => 'decimal:2',
+            'weight_grams' => 'decimal:3',
         ];
     }
 
@@ -75,8 +76,9 @@ class Item extends Model
     public static function generateBarcode(): string
     {
         do {
-            $code = 'I' . date('Ymd') . strtoupper(Str::random(6));
+            $code = 'I'.date('Ymd').strtoupper(Str::random(6));
         } while (self::where('barcode', $code)->exists());
+
         return $code;
     }
 }

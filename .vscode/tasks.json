@@ -1,0 +1,110 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "LMB: sync contragents from 1С",
+      "type": "shell",
+      "command": "php artisan lmb:sync-contragents",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {}
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "LMB: sync contragents + backfill passports (inforeg)",
+      "type": "shell",
+      "command": "php artisan lmb:sync-contragents --backfill-passports-from-inforeg",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "LMB: sync passports only (from 1С inforeg)",
+      "type": "shell",
+      "command": "php artisan lmb:sync-passports-from-1c",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "LMB: sync passports (dry-run)",
+      "type": "shell",
+      "command": "php artisan lmb:sync-passports-from-1c --dry-run",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "LMB: sync contragents + backfill identity (doc 517 + vt3220)",
+      "type": "shell",
+      "command": "php artisan lmb:sync-contragents --backfill-identity-from-1c",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "LMB: sync passports + identity (--with-identity)",
+      "type": "shell",
+      "command": "php artisan lmb:sync-passports-from-1c --with-identity",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Git: push origin main",
+      "type": "shell",
+      "command": "git push origin main",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Git: status",
+      "type": "shell",
+      "command": "git status -sb",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

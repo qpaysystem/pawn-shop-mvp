@@ -6,8 +6,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Загрузка истории звонков из MTS VPBX (vpbx.mts.ru).
- * API CRM: токен в заголовке X-AUTH-TOKEN, история — GET /api/v1/callHistory/enterprise.
+ * Телефония MTS: либо VPBX (vpbx.mts.ru, X-AUTH-TOKEN), либо Автосекретарь 2.0 (aa.mts.ru/api/ac20, Bearer JWT).
+ *
+ * @see https://aa.mts.ru/api/ac20/index.html
  */
 class MtsVpbxService
 {
@@ -17,24 +18,100 @@ class MtsVpbxService
 
     private string $token;
 
+    private string $api;
+
+    private string $ac20BaseUrl;
+
+    private string $ac20Domain;
+
+    private string $ac20TrunkId;
+
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.mts_vpbx.url', 'https://vpbx.mts.ru'), '/');
-        $this->login = config('services.mts_vpbx.login', '');
-        $this->token = config('services.mts_vpbx.password', '');
+        $cfg = config('services.mts_vpbx', []);
+        $this->baseUrl = rtrim((string) ($cfg['url'] ?? 'https://vpbx.mts.ru'), '/');
+        $this->login = (string) ($cfg['login'] ?? '');
+        $this->token = (string) ($cfg['password'] ?? '');
+        $this->api = strtolower((string) ($cfg['api'] ?? 'vpbx'));
+        $this->ac20BaseUrl = rtrim((string) ($cfg['ac20_base_url'] ?? 'https://aa.mts.ru/api/ac20'), '/');
+        $this->ac20Domain = trim((string) ($cfg['ac20_domain'] ?? ''));
+        $this->ac20TrunkId = preg_replace('/\D/', '', (string) ($cfg['ac20_trunk_id'] ?? ''));
+    }
+
+    public function usesAc20Api(): bool
+    {
+        return $this->api === 'ac20';
     }
 
     public function isConfigured(): bool
     {
-        return $this->token !== '';
+        if ($this->token === '') {
+            return false;
+        }
+        if ($this->usesAc20Api()) {
+            return $this->ac20Domain !== '' && strlen($this->ac20TrunkId) === 10;
+        }
+
+        return true;
+    }
+
+    /** Заголовки авторизации: VPBX — X-AUTH-TOKEN; AC20 — Bearer JWT. */
+    private function authHeaders(bool $jsonAccept = true): array
+    {
+        $h = [];
+        if ($jsonAccept) {
+            $h['Accept'] = 'application/json';
+        }
+        if ($this->usesAc20Api()) {
+            $h['Authorization'] = 'Bearer '.$this->token;
+        } else {
+            $h['X-AUTH-TOKEN'] = $this->token;
+        }
+
+        return $h;
+    }
+
+    private function httpOptions(): array
+    {
+        return ['curl' => [CURLOPT_SSL_CIPHER_LIST => 'DEFAULT@SECLEVEL=1']];
+    }
+
+    /**
+     * AC20: GET /trunks/all — нужны только JWT и параметр Domain (из ЛК / Swagger).
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function fetchAc20Trunks(string $domain): ?array
+    {
+        $domain = trim($domain);
+        if (! $this->usesAc20Api() || $this->token === '' || $domain === '') {
+            return null;
+        }
+
+        $url = $this->ac20BaseUrl.'/trunks/all';
+        $response = Http::timeout(30)
+            ->withOptions($this->httpOptions())
+            ->withHeaders($this->authHeaders())
+            ->get($url, ['Domain' => $domain]);
+
+        if (! $response->successful()) {
+            Log::debug('MtsVpbxService AC20: trunks/all failed', [
+                'status' => $response->status(),
+                'body' => substr($response->body(), 0, 400),
+            ]);
+
+            return null;
+        }
+
+        $data = $response->json();
+
+        return is_array($data) ? $data : null;
     }
 
     /**
      * Загрузить список звонков за период (API: GET /api/v1/callHistory/enterprise).
      * Возвращает массив: [ ['external_id' => ..., 'contact_date' => ..., 'contact_phone' => ..., 'direction' => ..., 'notes' => ..., 'call_status' => placed|missed, 'ext_tracking_id' => ...], ... ]
      *
-     * @param  \DateTimeInterface  $dateFrom
-     * @param  \DateTimeInterface  $dateTo
      * @return array<int, array{external_id: string, contact_date: string, contact_phone: string|null, direction: string, notes: string|null}>
      */
     public function fetchCalls(\DateTimeInterface $dateFrom, \DateTimeInterface $dateTo): array
@@ -43,9 +120,13 @@ class MtsVpbxService
             return [];
         }
 
+        if ($this->usesAc20Api()) {
+            return $this->fetchCallsAc20($dateFrom, $dateTo);
+        }
+
         $dateFromMs = (int) $dateFrom->getTimestamp() * 1000;
         $dateToMs = (int) $dateTo->getTimestamp() * 1000;
-        $url = $this->baseUrl . '/api/v1/callHistory/enterprise';
+        $url = $this->baseUrl.'/api/v1/callHistory/enterprise';
         $all = [];
         $page = 0;
         $size = 100;
@@ -93,13 +174,9 @@ class MtsVpbxService
             'page' => $page,
             'size' => $size,
         ];
-        $opts = ['curl' => [CURLOPT_SSL_CIPHER_LIST => 'DEFAULT@SECLEVEL=1']];
         $response = Http::timeout(30)
-            ->withOptions($opts)
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'X-AUTH-TOKEN' => $this->token,
-            ])
+            ->withOptions($this->httpOptions())
+            ->withHeaders($this->authHeaders())
             ->get($url, $params);
 
         if (! $response->successful()) {
@@ -108,11 +185,163 @@ class MtsVpbxService
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
+
             return null;
         }
 
         $body = $response->json();
+
         return is_array($body) ? $body : null;
+    }
+
+    /**
+     * Автосекретарь 2.0: GET /trunks/statistics (пагинация Limit до 1000, Offset).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function fetchCallsAc20(\DateTimeInterface $dateFrom, \DateTimeInterface $dateTo): array
+    {
+        $url = $this->ac20BaseUrl.'/trunks/statistics';
+        $begin = $dateFrom->format('Y-m-d\TH:i:s');
+        $end = $dateTo->format('Y-m-d\TH:i:s');
+        $limit = 1000;
+        $offset = 0;
+        $all = [];
+
+        do {
+            $params = [
+                'Domain' => $this->ac20Domain,
+                'TrunkId' => $this->ac20TrunkId,
+                'Begin' => $begin,
+                'End' => $end,
+                'Limit' => $limit,
+                'Offset' => $offset,
+            ];
+            $response = Http::timeout(60)
+                ->withOptions($this->httpOptions())
+                ->withHeaders($this->authHeaders())
+                ->get($url, $params);
+
+            if (! $response->successful()) {
+                Log::warning('MtsVpbxService AC20: statistics request failed', [
+                    'status' => $response->status(),
+                    'body' => substr($response->body(), 0, 500),
+                ]);
+                break;
+            }
+            $rows = $response->json();
+            if (! is_array($rows)) {
+                break;
+            }
+            $batch = 0;
+            foreach ($rows as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $item = $this->normalizeAc20StatisticsRow($row);
+                if ($item !== null) {
+                    $all[] = $item;
+                }
+                $batch++;
+            }
+            if ($batch < $limit) {
+                break;
+            }
+            $offset += $limit;
+        } while (true);
+
+        return $all;
+    }
+
+    /**
+     * Нормализация строки CallStatistics (AC20).
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>|null
+     */
+    private function normalizeAc20StatisticsRow(array $row): ?array
+    {
+        $callId = $this->arrayGet($row, 'callId');
+        if ($callId === null || $callId === '') {
+            return null;
+        }
+        $callIdStr = (string) $callId;
+
+        $start = $this->arrayGet($row, 'startTime');
+        if ($start === null || $start === '') {
+            return null;
+        }
+        try {
+            $dt = \Carbon\Carbon::parse($start);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        $contactDate = $dt->format('Y-m-d H:i:s');
+
+        $an = $this->arrayGet($row, 'an');
+        $dn = $this->arrayGet($row, 'dn');
+        $anDigits = $an !== null && $an !== '' ? preg_replace('/\D/', '', (string) $an) : '';
+        $dnDigits = $dn !== null && $dn !== '' ? preg_replace('/\D/', '', (string) $dn) : '';
+
+        $rel = $this->arrayGet($row, 'rel');
+        $isInternal = (int) $rel === 1;
+
+        // Внешний звонок: клиент с длинным номером на коротком/служебном — входящий (звонят нам) или исходящий (мы звоним клиенту).
+        $direction = 'incoming';
+        $rawPhone = $an;
+        if (! $isInternal) {
+            if (strlen($anDigits) >= 10 && strlen($dnDigits) < 10) {
+                $direction = 'incoming';
+                $rawPhone = $an;
+            } elseif (strlen($dnDigits) >= 10 && strlen($anDigits) < 10) {
+                $direction = 'outgoing';
+                $rawPhone = $dn;
+            } else {
+                $rawPhone = $an ?: $dn;
+            }
+        } else {
+            $rawPhone = $an ?: $dn;
+        }
+
+        $contactPhone = $this->normalizePhoneDigits($rawPhone);
+
+        $duration = $this->arrayGet($row, 'duration');
+        $durationSec = is_numeric($duration) ? (int) $duration : null;
+        $callStatus = ($durationSec !== null && $durationSec > 0) ? 'placed' : 'missed';
+        $notes = $durationSec !== null ? 'Длительность: '.$durationSec.' сек. (AC20)' : null;
+        if ($callStatus === 'missed' && $notes !== null) {
+            $notes .= ' Пропущенный / без ответа.';
+        } elseif ($callStatus === 'missed') {
+            $notes = 'Пропущенный / без ответа (AC20).';
+        }
+
+        $recDur = $this->arrayGet($row, 'recDur');
+        $hasRecording = is_numeric($recDur) && (int) $recDur > 0;
+
+        return [
+            'external_id' => 'mts_ac20_'.$callIdStr,
+            'contact_date' => $contactDate,
+            'contact_phone' => $contactPhone,
+            'direction' => $direction,
+            'notes' => $notes,
+            'call_status' => $callStatus,
+            'call_duration_sec' => $durationSec,
+            'ext_tracking_id' => $hasRecording ? $callIdStr : null,
+        ];
+    }
+
+    private function normalizePhoneDigits(mixed $raw): ?string
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        $contactPhone = preg_replace('/\D/', '', (string) $raw);
+        if (strlen($contactPhone) < 10) {
+            return null;
+        }
+        $contactPhone = '+'.(str_starts_with($contactPhone, '8') ? '7'.substr($contactPhone, 1) : (str_starts_with($contactPhone, '7') ? $contactPhone : '7'.$contactPhone));
+
+        return $contactPhone;
     }
 
     /** Получить значение из массива по ключу без учёта регистра (ответ API может быть с разным casing). */
@@ -127,6 +356,7 @@ class MtsVpbxService
                 return $v;
             }
         }
+
         return null;
     }
 
@@ -166,7 +396,7 @@ class MtsVpbxService
             $contactPhone = (string) $contactPhone;
             $contactPhone = preg_replace('/\D/', '', $contactPhone);
             if (strlen($contactPhone) >= 10) {
-                $contactPhone = '+' . (str_starts_with($contactPhone, '8') ? '7' . substr($contactPhone, 1) : (str_starts_with($contactPhone, '7') ? $contactPhone : '7' . $contactPhone));
+                $contactPhone = '+'.(str_starts_with($contactPhone, '8') ? '7'.substr($contactPhone, 1) : (str_starts_with($contactPhone, '7') ? $contactPhone : '7'.$contactPhone));
             } else {
                 $contactPhone = null;
             }
@@ -175,9 +405,9 @@ class MtsVpbxService
         $duration = $row['duration'] ?? $row['talk_time'] ?? $row['billsec'] ?? $row['answer_sec'] ?? null;
         $status = $this->arrayGet($row, 'status') ?? '';
         $callStatus = (strtoupper((string) $status) === 'MISSED') ? 'missed' : 'placed';
-        $notes = $duration !== null ? 'Длительность: ' . (int) $duration . ' сек.' : null;
+        $notes = $duration !== null ? 'Длительность: '.(int) $duration.' сек.' : null;
         if ($callStatus === 'missed') {
-            $notes = ($notes ? $notes . ' ' : '') . 'Пропущенный.';
+            $notes = ($notes ? $notes.' ' : '').'Пропущенный.';
         }
 
         $extTrackingId = $this->arrayGet($row, 'extTrackingId') ?? $this->arrayGet($row, 'ext_tracking_id');
@@ -190,7 +420,7 @@ class MtsVpbxService
         $durationSec = $duration !== null ? (int) $duration : null;
 
         return [
-            'external_id' => 'mts_' . $id,
+            'external_id' => 'mts_'.$id,
             'contact_date' => $contactDate,
             'contact_phone' => $contactPhone,
             'direction' => $direction,
@@ -210,22 +440,41 @@ class MtsVpbxService
         if (! $this->isConfigured()) {
             return null;
         }
-        $url = $this->baseUrl . '/api/callRecording/mp3/' . rawurlencode($extTrackingId);
-        $opts = ['curl' => [CURLOPT_SSL_CIPHER_LIST => 'DEFAULT@SECLEVEL=1']];
+        if ($this->usesAc20Api()) {
+            $binary = $this->fetchRecordingBinaryAc20($extTrackingId);
+            if ($binary === null) {
+                return null;
+            }
+            $dir = 'call_recordings';
+            $filename = preg_replace('/[^a-zA-Z0-9_\-.:]/', '_', $extTrackingId).'.mp3';
+            $path = $dir.'/'.$filename;
+            $fullPath = storage_path('app/'.$path);
+            if (! is_dir(dirname($fullPath))) {
+                mkdir(dirname($fullPath), 0755, true);
+            }
+            if (file_put_contents($fullPath, $binary) === false) {
+                return null;
+            }
+
+            return $path;
+        }
+
+        $url = $this->baseUrl.'/api/callRecording/mp3/'.rawurlencode($extTrackingId);
         $response = Http::timeout(60)
-            ->withOptions($opts)
-            ->withHeaders(['X-AUTH-TOKEN' => $this->token])
+            ->withOptions($this->httpOptions())
+            ->withHeaders($this->authHeaders(false))
             ->get($url);
 
         if (! $response->successful()) {
             Log::debug('MtsVpbxService: запись не получена', ['ext_tracking_id' => $extTrackingId, 'status' => $response->status()]);
+
             return null;
         }
 
         $dir = 'call_recordings';
-        $filename = preg_replace('/[^a-zA-Z0-9_\-.:]/', '_', $extTrackingId) . '.mp3';
-        $path = $dir . '/' . $filename;
-        $fullPath = storage_path('app/' . $path);
+        $filename = preg_replace('/[^a-zA-Z0-9_\-.:]/', '_', $extTrackingId).'.mp3';
+        $path = $dir.'/'.$filename;
+        $fullPath = storage_path('app/'.$path);
         if (! is_dir(dirname($fullPath))) {
             mkdir(dirname($fullPath), 0755, true);
         }
@@ -245,15 +494,128 @@ class MtsVpbxService
         if (! $this->isConfigured()) {
             return null;
         }
-        $url = $this->baseUrl . '/api/callRecording/mp3/' . rawurlencode($extTrackingId);
-        $opts = ['curl' => [CURLOPT_SSL_CIPHER_LIST => 'DEFAULT@SECLEVEL=1']];
+        if ($this->usesAc20Api()) {
+            return $this->fetchRecordingBinaryAc20($extTrackingId);
+        }
+
+        $url = $this->baseUrl.'/api/callRecording/mp3/'.rawurlencode($extTrackingId);
         $response = Http::timeout(60)
-            ->withOptions($opts)
-            ->withHeaders(['X-AUTH-TOKEN' => $this->token])
+            ->withOptions($this->httpOptions())
+            ->withHeaders($this->authHeaders(false))
             ->get($url);
 
         if (! $response->successful()) {
             Log::debug('MtsVpbxService: запись не получена', ['ext_tracking_id' => $extTrackingId, 'status' => $response->status()]);
+
+            return null;
+        }
+
+        return $response->body();
+    }
+
+    /**
+     * AC20: GET /stt/result — готовая расшифровка от МТС (фразы с привязкой к стороне звонка).
+     * Нужна услуга «Сервисы ИИ» / распознавание на транке. 204 — результат ещё не готов.
+     *
+     * @see https://aa.mts.ru/api/ac20/index.html
+     */
+    public function fetchCallSttTranscript(string $callIdStr): ?string
+    {
+        if (! $this->usesAc20Api() || ! $this->isConfigured()) {
+            return null;
+        }
+        if (! preg_match('/^\d+$/', $callIdStr)) {
+            return null;
+        }
+        $url = $this->ac20BaseUrl.'/stt/result';
+        $params = [
+            'Domain' => $this->ac20Domain,
+            'TrunkId' => $this->ac20TrunkId,
+            'CallId' => (int) $callIdStr,
+        ];
+        $response = Http::timeout(60)
+            ->withOptions($this->httpOptions())
+            ->withHeaders($this->authHeaders())
+            ->get($url, $params);
+
+        if ($response->status() === 204) {
+            return null;
+        }
+        if (! $response->successful()) {
+            Log::debug('MtsVpbxService AC20: stt/result failed', [
+                'call_id' => $callIdStr,
+                'status' => $response->status(),
+                'body' => substr($response->body(), 0, 400),
+            ]);
+
+            return null;
+        }
+        $data = $response->json();
+        if (! is_array($data)) {
+            return null;
+        }
+        $status = $data['status'] ?? '';
+        if ((string) $status !== 'Completed') {
+            return null;
+        }
+        $phrases = $data['phrases'] ?? null;
+        if (! is_array($phrases) || $phrases === []) {
+            return null;
+        }
+
+        return $this->formatAc20SttPhrases($phrases);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $phrases
+     */
+    private function formatAc20SttPhrases(array $phrases): ?string
+    {
+        $lines = [];
+        foreach ($phrases as $p) {
+            if (! is_array($p)) {
+                continue;
+            }
+            $text = trim((string) ($p['phrase'] ?? ''));
+            if ($text === '') {
+                continue;
+            }
+            $sideRaw = $p['callSide'] ?? $p['callside'] ?? '';
+            $side = is_string($sideRaw) ? strtolower($sideRaw) : '';
+            $label = match ($side) {
+                'user' => 'Клиент',
+                'operator' => 'Оператор',
+                'bot' => 'Бот',
+                default => '',
+            };
+            $lines[] = $label !== '' ? "{$label}: {$text}" : $text;
+        }
+
+        $out = trim(implode("\n", $lines));
+
+        return $out !== '' ? $out : null;
+    }
+
+    private function fetchRecordingBinaryAc20(string $callIdStr): ?string
+    {
+        if (! preg_match('/^\d+$/', $callIdStr)) {
+            return null;
+        }
+        $url = $this->ac20BaseUrl.'/trunks/record';
+        $params = [
+            'Domain' => $this->ac20Domain,
+            'TrunkId' => $this->ac20TrunkId,
+            'CallId' => (int) $callIdStr,
+            'Type' => 'mp3',
+        ];
+        $response = Http::timeout(120)
+            ->withOptions($this->httpOptions())
+            ->withHeaders($this->authHeaders(false))
+            ->get($url, $params);
+
+        if (! $response->successful()) {
+            Log::debug('MtsVpbxService AC20: запись не получена', ['call_id' => $callIdStr, 'status' => $response->status()]);
+
             return null;
         }
 

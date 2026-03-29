@@ -1,0 +1,25 @@
+{
+    "name": "Timeweb (шаблон)",
+    "host": "vhXXX.timeweb.ru",
+    "protocol": "ftp",
+    "port": 21,
+    "username": "ВАШ_ЛОГИН_ИЗ_ПАНЕЛИ",
+    "password": "ВАШ_ПАРОЛЬ",
+    "remotePath": "/pawn-shop-mvp",
+    "context": ".",
+    "uploadOnSave": false,
+    "ignore": [
+        ".vscode",
+        ".git",
+        ".gitignore",
+        ".env",
+        "node_modules",
+        "vendor",
+        "storage/logs/*",
+        "storage/framework/cache/*",
+        "storage/framework/sessions/*",
+        "storage/framework/views/*",
+        "*.log",
+        ".DS_Store"
+    ]
+}

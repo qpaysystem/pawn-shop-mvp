@@ -19,7 +19,10 @@ class SyncMtsVpbxCalls extends Command
     {
         $service = app(MtsVpbxService::class);
         if (! $service->isConfigured()) {
-            $this->error('MTS VPBX не настроен. Укажите MTS_VPBX_URL и MTS_VPBX_PASSWORD в .env');
+            $this->error($service->usesAc20Api()
+                ? 'MTS AC20: MTS_VPBX_PASSWORD (JWT), MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр), MTS_TELEPHONY_API=ac20'
+                : 'MTS VPBX: MTS_VPBX_URL и MTS_VPBX_PASSWORD в .env');
+
             return self::FAILURE;
         }
 
@@ -34,18 +37,20 @@ class SyncMtsVpbxCalls extends Command
 
         if ($calls === []) {
             $this->warn('Звонков не получено. Проверьте URL и пароль API, а также формат ответа vpbx.mts.ru.');
+
             return self::SUCCESS;
         }
 
-        $this->info('Получено записей: ' . count($calls));
+        $this->info('Получено записей: '.count($calls));
 
         if ($this->option('dry-run')) {
             foreach (array_slice($calls, 0, 10) as $c) {
                 $this->line("  {$c['contact_date']} | {$c['direction']} | {$c['contact_phone']} | {$c['external_id']}");
             }
             if (count($calls) > 10) {
-                $this->line('  ... и ещё ' . (count($calls) - 10));
+                $this->line('  ... и ещё '.(count($calls) - 10));
             }
+
             return self::SUCCESS;
         }
 
@@ -55,6 +60,7 @@ class SyncMtsVpbxCalls extends Command
         foreach ($calls as $call) {
             if (CallCenterContact::where('external_id', $call['external_id'])->exists()) {
                 $skipped++;
+
                 continue;
             }
 
@@ -70,9 +76,12 @@ class SyncMtsVpbxCalls extends Command
 
             CallCenterContact::create([
                 'external_id' => $call['external_id'],
+                'ext_tracking_id' => $call['ext_tracking_id'] ?? null,
                 'client_id' => $clientId,
                 'channel' => 'phone',
                 'direction' => $call['direction'],
+                'call_status' => $call['call_status'] ?? null,
+                'call_duration_sec' => $call['call_duration_sec'] ?? null,
                 'store_id' => null,
                 'contact_date' => $call['contact_date'],
                 'contact_phone' => $call['contact_phone'],
@@ -85,6 +94,7 @@ class SyncMtsVpbxCalls extends Command
         }
 
         $this->info("Создано обращений: {$created}, пропущено (дубли): {$skipped}.");
+
         return self::SUCCESS;
     }
 }

@@ -83,7 +83,7 @@
             </p>
         @endif
         <hr class="my-3">
-        <p class="mb-2 small text-muted">Расшифровка в текст: Whisper (распознавание речи) + DeepSeek (оформление). Нужны OPENAI_API_KEY и DEEPSEEK_API_KEY в .env.</p>
+        <p class="mb-2 small text-muted">Автосекретарь 2.0: при готовом распознавании в МТС подставляется текст сразу (фразы «Клиент» / «Оператор»). Иначе — Whisper и оформление через OpenAI; нужен <code>OPENAI_API_KEY</code>.</p>
         <form method="post" action="{{ route('call-center.transcribe', $callCenterContact) }}" class="d-inline">
             @csrf
             <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-text-left"></i> {{ $callCenterContact->recording_transcript ? 'Обновить расшифровку' : 'Транскрибировать в текст' }}</button>

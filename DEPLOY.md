@@ -11,6 +11,16 @@
 | **Первый раз выкладываете** | Часть 1 (подготовка) → Часть 2 (БД в панели) → Часть 3 (SSH, загрузка) → Часть 4 (шаги 7–14) → Часть 5 (домен) → Часть 6 (проверка). |
 | **Уже настроено, обновляете код** | Локально: `git push origin main`. На сервере: `cd ~/pawn-shop-mvp && git pull origin main && ./deploy.sh` |
 | **Одной командой с вашего ПК** | `git push origin main && ssh ЛОГИН@ХОСТ 'cd ~/pawn-shop-mvp && git pull origin main && ./deploy.sh'` |
+| **Шаблон скрипта (push + SSH + deploy.sh)** | Скопируйте `scripts/deploy-remote.example.sh` → `scripts/deploy-remote.sh`, задайте `DEPLOY_SSH` и запустите (файл в `.gitignore`). |
+
+---
+
+## Репозиторий Git
+
+- **GitHub:** [https://github.com/qpaysystem/pawn-shop-mvp](https://github.com/qpaysystem/pawn-shop-mvp) (ветка `main`).
+- **Первый раз на компьютере:** `git clone https://github.com/qpaysystem/pawn-shop-mvp.git` или по SSH: `git clone git@github.com:qpaysystem/pawn-shop-mvp.git`
+- **На сервере Timeweb (после появления SSH и ключа к GitHub):** в домашнем каталоге `git clone …` в папку `pawn-shop-mvp`, затем шаги из части 4 ниже (`.env`, симлинк `public_html`, миграции).
+- **SFTP (опционально):** шаблон без секретов — `.vscode/sftp.json.example` → скопируйте в `.vscode/sftp.json` (файл с паролем в репозиторий не коммитится).
 
 ---
 
@@ -510,7 +520,20 @@ export PHP=/usr/bin/php
 Для лендинга, API распознавания, интеграций можно позже добавить в `.env`:
 
 - `LOMBARD_NAME`, `LOMBARD_PHONE` — название и телефон в шапке/футере.
-- `LMB_USER_API_URL`, `LMB_USER_API_USERNAME`, `LMB_USER_API_PASSWORD` — 1С LMB: загрузка данных контрагента по телефону в карточку клиента (без порта: `http://5.128.186.3/lmb/hs/es`).
+- `LMB_USER_API_URL`, `LMB_USER_API_USERNAME`, `LMB_USER_API_PASSWORD` — 1С LMB: загрузка данных контрагента по телефону в карточку клиента (без порта: `http://5.128.186.3/lmb/hs/es`). **Интеграция с опубликованной базой 1С (testlmb) уже есть**: запросы идут по HTTP к веб-сервису 1С, без доступа к PostgreSQL/SQL. Логин/пароль пользователя 1С (`LMB_1C_USER`, `LMB_1C_PASSWORD`) хранятся для веб-сервисов, требующих авторизацию пользователем 1С; текущие методы используют технического пользователя UserWebServis.
+
+**Данные, которые можно получить через API 1С LMB:**
+
+| Метод | URL | Данные |
+|-------|-----|--------|
+| **Контрагент по телефону** | `GET {base_url}/user/{phone}` | Идентификатор контрагента в 1С (`user_uid` / `User_Uid` / `ID`), ФИО (`first_name`, `second_name`, `last_name` или общее ФИО/`FIO`/`Имя`), телефон (`phone`). Используется в карточке клиента («Загрузить из 1С»). |
+| **Каталог товаров (остатки)** | `GET {base_url}/ostatki` | Выгрузка каталога/остатков в JSON (структура зависит от конфигурации 1С). Команда: `php artisan lmb:ostatki`. |
+| **Создание контрагента** | `POST {base_url}/user_no` | Отправка данных нового контрагента (имя, телефон и т.д. в формате, ожидаемом 1С). Ответ — созданный объект или ошибка. |
+
+Точный состав полей в ответе `/user/{phone}` и структура `/ostatki` задаются в конфигурации 1С (веб-сервис «es»). В коде учитываются варианты ключей: `user_uid`, `User_Uid`, `first_name`, `First_Name`, `FIO`, `Имя`, `phone`, `Телефон` и др.
+
+Подробнее: **как изучить структуру таблиц 1С и как расширить API** (новые методы в 1С + вызов из Laravel) — см. [docs/LMB_1C_STRUCTURE_AND_API.md](docs/LMB_1C_STRUCTURE_AND_API.md).
+- `LMB_DB_*` — прямое подключение к БД 1С (MS SQL) для изучения структуры (`php artisan lmb:db-schema`). **Доступ к БД возможен только при включённом VPN** (сеть, где виден сервер 1С).
 - `GEMINI_API_KEY` или `GOOGLE_VISION_API_KEY` — распознавание текста с фото.
 - `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` — паспорт, транскрипция.
 - `SERPER_API_KEY` — поиск объявлений.

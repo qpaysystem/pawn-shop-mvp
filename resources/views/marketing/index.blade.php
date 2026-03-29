@@ -127,35 +127,55 @@
     </div>
 
     <div class="tab-pane fade" id="dgis" role="tabpanel">
-        @if($dgisBranch ?? null)
+        @if(count($dgisBranches ?? []) > 0)
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong>Карточки филиалов в 2ГИС</strong>
+                <form method="post" action="{{ route('marketing.refresh-2gis') }}" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-clockwise"></i> Обновить данные</button>
+                </form>
+            </div>
+            @foreach($dgisBranches as $branch)
             <div class="card mb-3">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <strong>Карточка организации в 2ГИС</strong>
-                    <form method="post" action="{{ route('marketing.refresh-2gis') }}" class="d-inline">
-                        @csrf
-                        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-clockwise"></i> Обновить данные</button>
-                    </form>
-                </div>
                 <div class="card-body">
-                    <p class="mb-1"><strong>{{ $dgisBranch['name'] }}</strong></p>
-                    @if(!empty($dgisBranch['address']))<p class="mb-1 text-muted small">{{ $dgisBranch['address'] }}</p>@endif
+                    <p class="mb-1"><strong>{{ $branch['name'] }}</strong></p>
+                    @if(!empty($branch['address']))<p class="mb-1 text-muted small">{{ $branch['address'] }}</p>@endif
                     <p class="mb-1">
-                        @if(isset($dgisBranch['rating']))<span class="badge bg-warning text-dark">Рейтинг: {{ number_format($dgisBranch['rating'], 1) }}</span>@endif
-                        @if(isset($dgisBranch['reviews_count']))<span class="badge bg-secondary">Отзывов: {{ $dgisBranch['reviews_count'] }}</span>@endif
+                        @if(isset($branch['rating']))<span class="badge bg-warning text-dark">Рейтинг: {{ number_format($branch['rating'], 1) }}</span>@endif
+                        @if(isset($branch['reviews_count']))<span class="badge bg-secondary">Отзывов: {{ $branch['reviews_count'] }}</span>@endif
                     </p>
-                    @if(!empty($dgisBranch['link']))<p class="mb-0"><a href="{{ $dgisBranch['link'] }}" target="_blank" rel="noopener">Открыть в 2ГИС <i class="bi bi-box-arrow-up-right"></i></a></p>@endif
+                    @if(!empty($branch['link']))<p class="mb-0"><a href="{{ $branch['link'] }}" target="_blank" rel="noopener">Открыть в 2ГИС <i class="bi bi-box-arrow-up-right"></i></a></p>@endif
                 </div>
             </div>
+            @endforeach
         @else
             <div class="alert alert-info">
-                Данные карточки 2ГИС подтягиваются по API. Укажите в <code>.env</code>: <code>DGIS_API_KEY</code> (ключ из <a href="https://platform.2gis.ru/" target="_blank" rel="noopener">Platform Manager</a>) и <code>DGIS_BRANCH_ID</code> (ID филиала из ссылки на карточку в 2ГИС).
+                Данные карточек 2ГИС подтягиваются по API. Укажите в <code>.env</code>: <code>DGIS_API_KEY</code> (ключ из <a href="https://platform.2gis.ru/" target="_blank" rel="noopener">Platform Manager</a>) и <code>DGIS_BRANCH_IDS</code> — ID филиалов через запятую (из ссылки 2gis.ru/.../firm/<strong>ID</strong>).
             </div>
         @endif
 
         <div class="card mb-3">
             <div class="card-header bg-light"><strong>Просмотры и звонки по дням</strong></div>
             <div class="card-body">
-                <p class="small text-muted">Просмотры карточки и звонки из 2ГИС в публичный API не отдаются. Добавляйте данные вручную из <a href="https://account.2gis.com/" target="_blank" rel="noopener">кабинета 2ГИС для бизнеса</a> или после экспорта.</p>
+                <p class="small text-muted">Просмотры карточки и звонки из 2ГИС в публичный API не отдаются. Добавляйте данные вручную из <a href="https://account.2gis.com/" target="_blank" rel="noopener">кабинета 2ГИС для бизнеса</a> или импортируйте выгрузки.</p>
+                <form method="post" action="{{ route('marketing.2gis-stats.import') }}" class="mb-4" enctype="multipart/form-data">
+                    @csrf
+                    <input type="hidden" name="date_from" value="{{ $dateFrom }}">
+                    <input type="hidden" name="date_to" value="{{ $dateTo }}">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label small mb-0">Просмотры (pagevisits-daily.xlsx)</label>
+                            <input type="file" name="pagevisits_daily" class="form-control form-control-sm" accept=".xlsx">
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label small mb-0">Звонки (connections-daily.xlsx)</label>
+                            <input type="file" name="connections_daily" class="form-control form-control-sm" accept=".xlsx">
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-upload"></i> Импорт</button>
+                        </div>
+                    </div>
+                </form>
                 <form method="post" action="{{ route('marketing.2gis-stats.store') }}" class="row g-2 mb-3">
                     @csrf
                     <input type="hidden" name="date_from" value="{{ $dateFrom }}">

@@ -1,0 +1,41 @@
+---
+description: Синхронизация паспортов клиентов из БД 1С (PostgreSQL) в таблицу clients — команды и порядок действий в Cursor
+alwaysApply: true
+---
+
+# LMB: паспорта из 1С в Cursor
+
+## Условия
+
+- В `.env`: `LMB_DB_DRIVER=pgsql`, настроено подключение к выгрузке 1С (`LMB_1C_*`).
+- Серия/номер: сначала `_reference122x1` (`_fld3202`/`_fld3201`), если пусто — регистр `_inforg25994` (`_fld25995rref` → контрагент, `_fld26001`/`_fld26002`). Настройки: `config/services.php` → `lmb_1c_contragent_sync.inforeg_*`.
+
+## Как запустить в Cursor
+
+1. **Терминал** (`Ctrl+` ` или View → Terminal): выполнить команды ниже из корня проекта `pawn-shop-mvp`.
+2. Или **Tasks: Run Task** (`Cmd/Ctrl+Shift+B` или Command Palette → «Tasks: Run Task») — выбрать задачу **LMB: …** (см. `.vscode/tasks.json`).
+
+## Команды Artisan
+
+```bash
+# Полный синк контрагентов + автоматическое подтягивание паспорта (ref → inforeg)
+php artisan lmb:sync-contragents
+
+# То же + дозаполнить пустые passport_data из регистра inforeg
+php artisan lmb:sync-contragents --backfill-passports-from-inforeg
+
+# Только дозаполнение паспортов по уже импортированным клиентам (с user_uid)
+php artisan lmb:sync-passports-from-1c
+
+# Проверка без записи / принудительная перезапись
+php artisan lmb:sync-passports-from-1c --dry-run
+php artisan lmb:sync-passports-from-1c --force
+```
+
+## Документация в репозитории
+
+- `docs/LMB_1C_CONTRAGENT_FULL_DATA.md` — откуда берутся поля в PostgreSQL.
+
+## Для агента
+
+При запросе «синхронизировать паспорта / клиентов из 1С» — предлагать команды выше; не хранить в коде учётные данные БД 1С.

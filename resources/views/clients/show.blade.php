@@ -20,15 +20,24 @@
         @endif
         <p><strong>Телефон:</strong> {{ $client->phone }}</p>
         @if($client->email)<p><strong>Email:</strong> {{ $client->email }}</p>@endif
-        @if(!$client->isLegal() && $client->passport_data)<p><strong>Паспорт:</strong> {{ $client->passport_data }}</p>@endif
-        @if($client->notes)<p><strong>Заметки:</strong> {{ $client->notes }}</p>@endif
-        @if($client->trafficSource || $client->funnel_stage)
-            <p class="mb-0">
-                <strong>Маркетинг:</strong>
-                @if($client->trafficSource)<span class="badge bg-primary">{{ $client->trafficSource->name }}</span>@endif
-                @if($client->funnel_stage)<span class="badge bg-secondary">{{ \App\Models\Client::funnelStageLabels()[$client->funnel_stage] ?? $client->funnel_stage }}</span>@endif
-            </p>
+        <p><strong>Паспортные данные:</strong> {{ $client->passport_data ?: '—' }}</p>
+        @if(!$client->isLegal())
+            @if($client->lmb_identity_document_type)<p><strong>Вид документа (1С):</strong> {{ $client->lmb_identity_document_type }}</p>@endif
+            @if($client->lmb_passport_issued_by)<p><strong>Кем выдан (1С):</strong> {{ $client->lmb_passport_issued_by }}</p>@endif
+            @if($client->lmb_passport_issued_at)<p><strong>Дата выдачи (1С):</strong> {{ $client->lmb_passport_issued_at->format('d.m.Y') }}</p>@endif
+            @if($client->lmb_registration_address)<p><strong>Адрес регистрации / проживания (1С):</strong> {{ $client->lmb_registration_address }}</p>@endif
         @endif
+        @if($client->lmb_created_at)<p><strong>Дата создания (из 1С):</strong> {{ \Carbon\Carbon::parse($client->lmb_created_at)->format('d.m.Y') }}</p>@endif
+        @if($client->trafficSource || $client->funnel_stage)
+            <p class="mb-1">
+                <strong>Источник рекламы:</strong>
+                @if($client->trafficSource)<span class="badge bg-primary">{{ $client->trafficSource->name }}</span>@else<span class="text-muted">—</span>@endif
+            </p>
+            @if($client->funnel_stage)
+            <p class="mb-0"><strong>Этап воронки:</strong> <span class="badge bg-secondary">{{ \App\Models\Client::funnelStageLabels()[$client->funnel_stage] ?? $client->funnel_stage }}</span></p>
+            @endif
+        @endif
+        @if($client->notes)<p><strong>Заметки:</strong> {{ $client->notes }}</p>@endif
         @if($client->blacklist_flag)<p><span class="badge bg-danger">В чёрном списке</span></p>@endif
     </div>
 </div>
@@ -41,9 +50,19 @@
         </form>
     </div>
     <div class="card-body">
-        @if($client->user_uid || $client->lmb_full_name)
+        @if($client->user_uid || $client->lmb_full_name || $client->passport_data || $client->lmb_created_at)
             <p class="mb-1"><strong>Код в 1С (user_uid):</strong> {{ $client->user_uid ?? '—' }}</p>
-            <p class="mb-1"><strong>ФИО из 1С (first_name):</strong> {{ $client->lmb_full_name ?? '—' }}</p>
+            <p class="mb-1"><strong>ФИО из 1С:</strong> {{ $client->lmb_full_name ?? '—' }}</p>
+            @if($client->passport_data)<p class="mb-1"><strong>Паспортные данные (из 1С):</strong> {{ $client->passport_data }}</p>@endif
+            @if(!$client->isLegal())
+                @if($client->lmb_identity_document_type)<p class="mb-1"><strong>Вид документа:</strong> {{ $client->lmb_identity_document_type }}</p>@endif
+                @if($client->lmb_passport_issued_by)<p class="mb-1"><strong>Кем выдан:</strong> {{ $client->lmb_passport_issued_by }}</p>@endif
+                @if($client->lmb_passport_issued_at)<p class="mb-1"><strong>Дата выдачи:</strong> {{ $client->lmb_passport_issued_at->format('d.m.Y') }}</p>@endif
+                @if($client->lmb_registration_address)<p class="mb-1"><strong>Адрес регистрации:</strong> {{ $client->lmb_registration_address }}</p>@endif
+                @if(!empty($client->lmb_data['identity_document_line_from_1c']))<p class="mb-1 text-muted small"><strong>Строка документа (1С):</strong> {{ mb_strlen($client->lmb_data['identity_document_line_from_1c']) > 500 ? mb_substr($client->lmb_data['identity_document_line_from_1c'], 0, 500).'…' : $client->lmb_data['identity_document_line_from_1c'] }}</p>@endif
+            @endif
+            @if($client->lmb_created_at)<p class="mb-1"><strong>Дата создания в 1С:</strong> {{ \Carbon\Carbon::parse($client->lmb_created_at)->format('d.m.Y') }}</p>@endif
+            @if($client->trafficSource)<p class="mb-1"><strong>Источник рекламы (из 1С):</strong> {{ $client->trafficSource->name }}</p>@endif
             @if($client->lmb_data && (isset($client->lmb_data['second_name']) || isset($client->lmb_data['last_name']) || isset($client->lmb_data['phone'])))
                 <p class="mb-1"><strong>Имя (second_name):</strong> {{ $client->lmb_data['second_name'] ?? '—' }}</p>
                 <p class="mb-1"><strong>Отчество (last_name):</strong> {{ $client->lmb_data['last_name'] ?? '—' }}</p>

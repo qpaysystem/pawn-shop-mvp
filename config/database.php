@@ -43,6 +43,35 @@ return [
             'schema' => 'public',
             'sslmode' => 'prefer',
         ],
+
+        // База 1С (MS SQL Server): Srvr + Ref — типичная связка для 1С
+        'lmb_1c' => [
+            'driver' => 'sqlsrv',
+            'host' => env('LMB_DB_HOST', '1c-dl380g7'),
+            'port' => env('LMB_DB_PORT', '1433'),
+            'database' => env('LMB_DB_DATABASE', 'testlmb'),
+            'username' => env('LMB_DB_USERNAME', 'UserWebServis'),
+            'password' => env('LMB_DB_PASSWORD', 'UserWebServis'),
+            'charset' => env('LMB_DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('LMB_DB_ENCRYPT', 'optional'),
+            'trust_server_certificate' => env('LMB_DB_TRUST_CERT', true),
+        ],
+
+        // База 1С (PostgreSQL): при LMB_DB_DRIVER=pgsql использовать это соединение (хост 192.168.7.250, пользователь lmb)
+        'lmb_1c_pgsql' => [
+            'driver' => 'pgsql',
+            'host' => env('LMB_DB_HOST', '192.168.7.250'),
+            'port' => env('LMB_DB_PORT', '5432'),
+            'database' => env('LMB_DB_DATABASE', 'testlmb'),
+            'username' => env('LMB_DB_USERNAME', 'UserWebServis'),
+            'password' => env('LMB_DB_PASSWORD', 'UserWebServis'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'schema' => 'public',
+            'sslmode' => 'prefer',
+        ],
     ],
     'migrations' => 'migrations',
     'redis' => [

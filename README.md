@@ -62,9 +62,27 @@
    ```
    Открыть в браузере: http://localhost:8000
 
+## Обзор проекта (архитектура, риски, планы)
+
+См. **[docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)** — как всё связано, что не доделано, на что смотреть и следующие шаги.
+
+## Интеграция 1С и паспортов (Cursor)
+
+- В **Cursor**: Command Palette → **Tasks: Run Task** → задачи **LMB: sync …** (см. `.vscode/tasks.json`) или команды в терминале из корня проекта.
+- Подробности и переменные окружения: **`.cursor/rules/lmb-1c-passport-sync.mdc`**, **`docs/LMB_1C_CONTRAGENT_FULL_DATA.md`**.
+
+```bash
+php artisan lmb:sync-contragents --backfill-passports-from-inforeg
+php artisan lmb:sync-passports-from-1c
+```
+
 ## Выкладка на боевой хостинг
 
-Подробная инструкция — в файле **[DEPLOY.md](DEPLOY.md)**. Кратко: на сервере с SSH после загрузки проекта выполнить `composer install --no-dev`, настроить `.env` (production, БД), запустить миграции и `php artisan storage:link`, указать Document Root на папку `public`. Для обновлений можно запускать `./deploy.sh`.
+- Репозиторий: **https://github.com/qpaysystem/pawn-shop-mvp** (`main`).
+- Полная инструкция (Timeweb, SSH, БД): **[DEPLOY.md](DEPLOY.md)**.
+- Обновление на сервере: в каталоге проекта `./deploy.sh` (миграции, кэш, composer).
+- С вашего Mac: `git push origin main`, затем на сервере `git pull` и `./deploy.sh`, либо шаблон **`scripts/deploy-remote.example.sh`** → `scripts/deploy-remote.sh` с переменной `DEPLOY_SSH`.
+- SFTP: шаблон **`.vscode/sftp.json.example`** → `.vscode/sftp.json` (не коммитить).
 
 ## Тестовые пользователи (после `db:seed`)
 

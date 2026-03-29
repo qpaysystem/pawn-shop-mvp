@@ -872,10 +872,11 @@ PROMPT;
         $model = config('services.gemini.model', 'gemini-2.0-flash');
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . urlencode($apiKey);
         $response = Http::timeout(25)
-            ->withHeaders(['Content-Type' => 'application/json'])
+            ->asJson()
             ->post($url, [
                 'contents' => [
                     [
+                        'role' => 'user',
                         'parts' => [
                             [
                                 'text' => 'Извлеки весь текст с этого изображения разворота паспорта РФ. Верни только распознанный текст, построчно, без пояснений и комментариев. Если текст не разборчив — верни то, что удалось прочитать.',

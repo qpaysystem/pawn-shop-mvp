@@ -51,8 +51,9 @@ class LmbUserApiService
             return '';
         }
         if (str_starts_with($digits, '8') && strlen($digits) >= 11) {
-            return '7' . substr($digits, 1);
+            return '7'.substr($digits, 1);
         }
+
         return $digits;
     }
 
@@ -70,7 +71,7 @@ class LmbUserApiService
             return ['error' => 'Некорректный номер телефона.'];
         }
 
-        $url = $this->baseUrl . '/user/' . rawurlencode($id);
+        $url = $this->baseUrl.'/user/'.rawurlencode($id);
         Log::info('LmbUserApiService: запрос user по телефону', ['url' => $url]);
 
         try {
@@ -81,29 +82,76 @@ class LmbUserApiService
                     'url' => $url,
                     'status' => $response->status(),
                 ]);
-                return ['error' => '1С вернула HTTP ' . $response->status() . '. Проверьте URL и доступ к серверу.'];
+
+                return ['error' => '1С вернула HTTP '.$response->status().'. Проверьте URL и доступ к серверу.'];
             }
 
             $body = $response->body();
             $data = $this->parseResponse($body);
             if ($data !== null && is_array($data)) {
                 Log::info('LmbUserApiService: получен ответ 1С', ['keys' => array_keys($data), 'user_uid' => $data['user_uid'] ?? $data['User_Uid'] ?? null]);
+
                 return $data;
             }
             Log::warning('LmbUserApiService: не удалось разобрать ответ', [
                 'body_length' => strlen($body),
                 'body_preview' => mb_substr(trim($body), 0, 500),
             ]);
+
             return ['raw' => $body];
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             Log::warning('LmbUserApiService: ошибка соединения', ['url' => $url, 'message' => $e->getMessage()]);
-            return ['error' => 'Нет связи с сервером 1С: ' . $e->getMessage() . '. Убедитесь, что хост ' . parse_url($this->baseUrl, PHP_URL_HOST) . ' доступен с этого компьютера (сеть/VPN).'];
+
+            return ['error' => 'Нет связи с сервером 1С: '.$e->getMessage().'. Убедитесь, что хост '.parse_url($this->baseUrl, PHP_URL_HOST).' доступен с этого компьютера (сеть/VPN).'];
         } catch (\Throwable $e) {
             Log::warning('LmbUserApiService: ошибка запроса', ['url' => $url, 'message' => $e->getMessage()]);
-            return ['error' => 'Ошибка запроса к 1С: ' . $e->getMessage()];
+
+            return ['error' => 'Ошибка запроса к 1С: '.$e->getMessage()];
         }
 
         return ['error' => 'Не удалось получить ответ от 1С. Проверьте LMB_USER_API_URL в .env (без порта 5665: http://5.128.186.3/lmb/hs/es).'];
+    }
+
+    /**
+     * Список действующих залогодателей (контрагентов с залогами).
+     * GET {base_url}/zalogodateli → JSON-массив с полями: user_uid, first_name, second_name, last_name, phone, email (по формату 1С).
+     * Метод должен быть реализован в 1С; пока его нет — вернёт null.
+     *
+     * @return array<int, array<string, mixed>>|null
+     */
+    public function getZalogodateli(): ?array
+    {
+        $url = $this->baseUrl.'/zalogodateli';
+
+        try {
+            $response = $this->request()->get($url);
+
+            if (! $response->successful()) {
+                Log::warning('LmbUserApiService: zalogodateli неуспешный ответ', [
+                    'url' => $url,
+                    'status' => $response->status(),
+                ]);
+
+                return null;
+            }
+
+            $data = json_decode($response->body(), true);
+            if (is_array($data) && isset($data[0])) {
+                return $data;
+            }
+            if (is_array($data) && isset($data['items'])) {
+                return $data['items'];
+            }
+
+            return is_array($data) ? $data : null;
+        } catch (\Throwable $e) {
+            Log::warning('LmbUserApiService: zalogodateli ошибка запроса', [
+                'url' => $url,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**
@@ -114,7 +162,7 @@ class LmbUserApiService
      */
     public function getOstatki(): ?array
     {
-        $url = $this->baseUrl . '/ostatki';
+        $url = $this->baseUrl.'/ostatki';
 
         try {
             $response = $this->request()->get($url);
@@ -124,16 +172,19 @@ class LmbUserApiService
                     'url' => $url,
                     'status' => $response->status(),
                 ]);
+
                 return null;
             }
 
             $data = json_decode($response->body(), true);
+
             return is_array($data) ? $data : null;
         } catch (\Throwable $e) {
             Log::warning('LmbUserApiService: ostatki ошибка запроса', [
                 'url' => $url,
                 'message' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
@@ -147,7 +198,7 @@ class LmbUserApiService
      */
     public function createUser(array $data): ?array
     {
-        $url = $this->baseUrl . '/user_no';
+        $url = $this->baseUrl.'/user_no';
 
         try {
             $response = $this->request()
@@ -161,16 +212,19 @@ class LmbUserApiService
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
+
                 return null;
             }
 
             $decoded = json_decode($response->body(), true);
+
             return is_array($decoded) ? $decoded : ['raw' => $response->body()];
         } catch (\Throwable $e) {
             Log::warning('LmbUserApiService: user_no ошибка запроса', [
                 'url' => $url,
                 'message' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
@@ -181,13 +235,13 @@ class LmbUserApiService
      */
     public function testConnection(): array
     {
-        $url = $this->baseUrl . '/ostatki';
+        $url = $this->baseUrl.'/ostatki';
 
         try {
             $response = $this->request()->get($url);
             $status = $response->status();
             $body = $response->body();
-            $preview = $body !== '' ? mb_substr($body, 0, 200) . (mb_strlen($body) > 200 ? '…' : '') : null;
+            $preview = $body !== '' ? mb_substr($body, 0, 200).(mb_strlen($body) > 200 ? '…' : '') : null;
 
             return [
                 'ok' => $response->successful(),
@@ -220,13 +274,13 @@ class LmbUserApiService
                 'body_preview' => null,
             ];
         }
-        $url = $this->baseUrl . '/user/' . rawurlencode($id);
+        $url = $this->baseUrl.'/user/'.rawurlencode($id);
 
         try {
             $response = $this->request()->get($url);
             $status = $response->status();
             $body = $response->body();
-            $preview = $body !== '' ? mb_substr($body, 0, 200) . (mb_strlen($body) > 200 ? '…' : '') : null;
+            $preview = $body !== '' ? mb_substr($body, 0, 200).(mb_strlen($body) > 200 ? '…' : '') : null;
 
             return [
                 'ok' => $response->successful(),
@@ -295,6 +349,7 @@ class LmbUserApiService
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                 return $decoded;
             }
+
             return null;
         }
         // Попробовать json_decode в любом случае (на случай лишних символов в начале)

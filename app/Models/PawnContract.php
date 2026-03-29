@@ -18,23 +18,21 @@ class PawnContract extends Model
     }
 
     protected $fillable = [
-        'contract_number', 'client_id', 'item_id', 'appraiser_id', 'store_id',
+        'contract_number', 'lmb_doc_uid', 'lmb_data', 'client_id', 'item_id', 'appraiser_id', 'store_id',
         'loan_amount', 'loan_percent', 'loan_date', 'expiry_date', 'buyback_amount',
         'is_redeemed', 'redeemed_at', 'redeemed_by',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'loan_date' => 'date',
-            'expiry_date' => 'date',
-            'redeemed_at' => 'datetime',
-            'loan_amount' => 'decimal:2',
-            'loan_percent' => 'decimal:2',
-            'buyback_amount' => 'decimal:2',
-            'is_redeemed' => 'boolean',
-        ];
-    }
+    protected $casts = [
+        'loan_date' => 'date',
+        'expiry_date' => 'date',
+        'redeemed_at' => 'datetime',
+        'loan_amount' => 'decimal:2',
+        'loan_percent' => 'decimal:2',
+        'buyback_amount' => 'decimal:2',
+        'is_redeemed' => 'boolean',
+        'lmb_data' => 'array',
+    ];
 
     public function client()
     {
@@ -85,6 +83,7 @@ class PawnContract extends Model
         if ($last && preg_match('/L-\d{4}-(\d+)/', $last, $m)) {
             $num = (int) $m[1] + 1;
         }
+
         return sprintf('L-%s-%05d', $year, $num);
     }
 }

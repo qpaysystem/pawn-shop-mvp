@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+# Выполняет по SSH на 192.168.7.250 команды GRANT для пользователя lmb.
+# Использование: ./scripts/ssh_grant_lmb_select.exp [ssh_password]
+# Пароль по умолчанию: root (можно передать первым аргументом).
+
+set timeout 30
+set host "192.168.7.250"
+set user "root"
+set pass [lindex $argv 0]
+if { "$pass" == "" } { set pass "root" }
+
+set psql_cmd {su postgres -c "psql -d lmb -c 'GRANT SELECT ON ALL TABLES IN SCHEMA public TO lmb; GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO lmb;'"}
+
+spawn ssh -o StrictHostKeyChecking=no -p 22 ${user}@${host} $psql_cmd
+
+expect {
+    "password:" {
+        send "$pass\r"
+        exp_continue
+    }
+    "Password:" {
+        send "$pass\r"
+        exp_continue
+    }
+    "GRANT" {
+        puts "\n=== GRANT выполнен успешно ===\n"
+    }
+    "ERROR" {
+        puts "\n=== Ошибка PostgreSQL (см. вывод выше) ===\n"
+        exit 1
+    }
+    timeout {
+        puts "Таймаут."
+        exit 1
+    }
+    eof
+}
+
+wait

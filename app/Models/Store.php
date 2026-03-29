@@ -10,7 +10,7 @@ class Store extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'address', 'phone', 'is_active'];
+    protected $fillable = ['name', 'address', 'phone', 'is_active', 'lmb_store_uid'];
 
     protected function casts(): array
     {
@@ -47,6 +47,7 @@ class Store extends Model
         $expense = $this->cashDocuments()
             ->whereHas('operationType', fn ($q) => $q->where('direction', 'expense'))
             ->sum('amount');
+
         return round((float) $income + (float) $incomingTransfers - (float) $expense, 2);
     }
 }

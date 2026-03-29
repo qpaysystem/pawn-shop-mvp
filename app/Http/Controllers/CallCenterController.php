@@ -73,7 +73,11 @@ class CallCenterController extends Controller
         set_time_limit(300);
         $service = app(MtsVpbxService::class);
         if (! $service->isConfigured()) {
-            return redirect()->route('call-center.index')->with('error', 'MTS VPBX не настроен (MTS_VPBX_URL, MTS_VPBX_PASSWORD в .env).');
+            $hint = $service->usesAc20Api()
+                ? 'Для AC20: MTS_TELEPHONY_API=ac20, MTS_VPBX_PASSWORD (JWT), MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр).'
+                : 'Укажите MTS_VPBX_URL и MTS_VPBX_PASSWORD в .env.';
+
+            return redirect()->route('call-center.index')->with('error', 'Телефония MTS не настроена. '.$hint);
         }
 
         $days = (int) $request->input('days', 1);
@@ -104,6 +108,7 @@ class CallCenterController extends Controller
                     $existing->update($update);
                 }
                 $skipped++;
+
                 continue;
             }
 
@@ -138,7 +143,7 @@ class CallCenterController extends Controller
 
         $message = $created > 0 || $skipped > 0
             ? "Загружено звонков MTS: создано {$created}, пропущено дублей {$skipped}."
-            : 'Звонков не получено. Если приходит 403: включите доступ к API в личном кабинете MTS VPBX. Команда: php artisan mts:debug-response';
+            : 'Звонков не получено. Проверьте токен и для AC20 — домен и TrunkId. Команда: php artisan mts:debug-response';
 
         return redirect()->route('call-center.index')->with($created > 0 ? 'success' : 'error', $message);
     }
@@ -170,14 +175,22 @@ class CallCenterController extends Controller
         foreach ($contacts as $contact) {
             $path = $service->downloadRecording($contact->ext_tracking_id);
             if ($path !== null) {
-                $contact->update(['recording_path' => $path]);
+                $updates = ['recording_path' => $path];
+                if ($service->usesAc20Api()) {
+                    $stt = $service->fetchCallSttTranscript((string) $contact->ext_tracking_id);
+                    if ($stt !== null && trim($stt) !== '') {
+                        $updates['recording_transcript'] = $stt;
+                    }
+                }
+                $contact->update($updates);
                 $downloaded++;
             } else {
                 $failed++;
             }
         }
 
-        $message = "Записи разговоров: загружено {$downloaded}" . ($failed > 0 ? ", не удалось загрузить {$failed} (MTS может отдавать 404/429 для старых записей)." : '.');
+        $message = "Записи разговоров: загружено {$downloaded}".($failed > 0 ? ", не удалось загрузить {$failed} (MTS может отдавать 404/429 для старых записей)." : '.');
+
         return redirect()->route('call-center.index')->with($downloaded > 0 ? 'success' : 'info', $message);
     }
 
@@ -200,11 +213,12 @@ class CallCenterController extends Controller
         if (request()->boolean('download')) {
             return Storage::disk('local')->download($path, $filename, ['Content-Type' => 'audio/mpeg']);
         }
+
         // Для воспроизведения в <audio> отдаём файл с inline (браузер не скачивает, а играет)
         return response()->file($fullPath, ['Content-Type' => 'audio/mpeg']);
     }
 
-    /** Транскрибировать запись разговора (Whisper + DeepSeek) и сохранить текст в событии. */
+    /** Транскрибировать запись: при AC20 — готовый текст МТС (/stt/result), иначе Whisper + оформление OpenAI. */
     public function transcribeRecording(CallCenterContact $callCenterContact): RedirectResponse
     {
         set_time_limit(180);
@@ -215,22 +229,34 @@ class CallCenterController extends Controller
             return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Транскрипция доступна только для звонков.');
         }
 
+        $mts = app(MtsVpbxService::class);
+        $trackingId = $this->mtsTrackingIdForRecording($callCenterContact);
+        if ($mts->usesAc20Api() && $mts->isConfigured() && $trackingId !== null && $trackingId !== '' && preg_match('/^\d+$/', $trackingId)) {
+            $fromMts = $mts->fetchCallSttTranscript($trackingId);
+            if ($fromMts !== null && trim($fromMts) !== '') {
+                $callCenterContact->update(['recording_transcript' => $fromMts]);
+
+                return redirect()->route('call-center.show', $callCenterContact)->with('success', 'Расшифровка сохранена (МТС Автосекретарь).');
+            }
+        }
+
         $audioPath = null;
         $tempPath = null;
 
         if (! empty($callCenterContact->recording_path) && Storage::disk('local')->exists($callCenterContact->recording_path)) {
             $audioPath = Storage::disk('local')->path($callCenterContact->recording_path);
         } elseif (! empty($callCenterContact->ext_tracking_id) || ($callCenterContact->external_id && str_starts_with($callCenterContact->external_id, 'mts_'))) {
-            $mts = app(MtsVpbxService::class);
             if (! $mts->isConfigured()) {
                 return redirect()->route('call-center.show', $callCenterContact)->with('error', 'MTS VPBX не настроен — нельзя загрузить запись для транскрипции.');
             }
-            $trackingId = $callCenterContact->ext_tracking_id ?: substr($callCenterContact->external_id, 4);
+            if ($trackingId === null || $trackingId === '') {
+                return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Нет идентификатора записи MTS (CallId / ext_tracking_id).');
+            }
             $content = $mts->fetchRecordingContent($trackingId);
             if ($content === null) {
                 return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Не удалось загрузить запись с MTS.');
             }
-            $tempPath = storage_path('app/temp_rec_' . $callCenterContact->id . '_' . time() . '.mp3');
+            $tempPath = storage_path('app/temp_rec_'.$callCenterContact->id.'_'.time().'.mp3');
             if (! is_dir(dirname($tempPath))) {
                 mkdir(dirname($tempPath), 0755, true);
             }
@@ -254,7 +280,11 @@ class CallCenterController extends Controller
         }
 
         if ($transcript === null || trim($transcript) === '') {
-            return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Не удалось получить текст (проверьте OPENAI_API_KEY для Whisper и при необходимости DEEPSEEK_API_KEY в .env).');
+            $hint = $mts->usesAc20Api()
+                ? ' Для AC20: расшифровка может появиться в МТС позже — повторите через несколько минут или проверьте OPENAI_API_KEY (Whisper).'
+                : ' Проверьте OPENAI_API_KEY (Whisper и оформление текста).';
+
+            return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Не удалось получить текст.'.$hint);
         }
 
         $callCenterContact->update(['recording_transcript' => $transcript]);
@@ -272,10 +302,7 @@ class CallCenterController extends Controller
             return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Этот звонок не из MTS.');
         }
 
-        $trackingId = $callCenterContact->ext_tracking_id;
-        if (empty($trackingId)) {
-            $trackingId = substr($callCenterContact->external_id, 4);
-        }
+        $trackingId = $this->mtsTrackingIdForRecording($callCenterContact);
         if (empty($trackingId)) {
             return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Нет идентификатора записи для запроса к MTS.');
         }
@@ -290,12 +317,12 @@ class CallCenterController extends Controller
             return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Запись не получена из MTS (404 или недоступна). Можно открыть историю вызовов в личном кабинете MTS.');
         }
 
-        $filename = 'recording-' . preg_replace('/[^a-zA-Z0-9_\-.:]/', '_', $trackingId) . '.mp3';
+        $filename = 'recording-'.preg_replace('/[^a-zA-Z0-9_\-.:]/', '_', $trackingId).'.mp3';
         $disposition = request()->boolean('download') ? 'attachment' : 'inline';
 
         return response($content, 200, [
             'Content-Type' => 'audio/mpeg',
-            'Content-Disposition' => $disposition . '; filename="' . $filename . '"',
+            'Content-Disposition' => $disposition.'; filename="'.$filename.'"',
         ]);
     }
 
@@ -329,9 +356,9 @@ class CallCenterController extends Controller
 
         $contactDate = $data['contact_date'];
         if (! empty($request->contact_time) && preg_match('/^(\d{1,2}):(\d{2})$/', trim($request->contact_time), $m)) {
-            $contactDate .= ' ' . str_pad($m[1], 2, '0', STR_PAD_LEFT) . ':' . $m[2] . ':00';
+            $contactDate .= ' '.str_pad($m[1], 2, '0', STR_PAD_LEFT).':'.$m[2].':00';
         } else {
-            $contactDate .= ' ' . date('H:i:s');
+            $contactDate .= ' '.date('H:i:s');
         }
 
         CallCenterContact::create([
@@ -403,9 +430,9 @@ class CallCenterController extends Controller
 
         $contactDate = $data['contact_date'];
         if (! empty($request->contact_time) && preg_match('/^(\d{1,2}):(\d{2})$/', trim($request->contact_time), $m)) {
-            $contactDate .= ' ' . str_pad($m[1], 2, '0', STR_PAD_LEFT) . ':' . $m[2] . ':00';
+            $contactDate .= ' '.str_pad($m[1], 2, '0', STR_PAD_LEFT).':'.$m[2].':00';
         } else {
-            $contactDate .= ' ' . \Carbon\Carbon::parse($callCenterContact->contact_date)->format('H:i:s');
+            $contactDate .= ' '.\Carbon\Carbon::parse($callCenterContact->contact_date)->format('H:i:s');
         }
 
         $callCenterContact->update([
@@ -432,7 +459,7 @@ class CallCenterController extends Controller
         $dateFrom = $request->get('date_from', now()->subDays(30)->format('Y-m-d'));
         $dateTo = $request->get('date_to', now()->format('Y-m-d'));
 
-        $baseQuery = CallCenterContact::whereBetween('contact_date', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+        $baseQuery = CallCenterContact::whereBetween('contact_date', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59'])
             ->where(function ($q) use ($storeIds) {
                 $q->whereIn('store_id', $storeIds)->orWhereNull('store_id');
             });
@@ -473,5 +500,27 @@ class CallCenterController extends Controller
             'convertedPawn', 'convertedPurchase', 'convertedCommission', 'totalDeals',
             'conversionRate', 'dateFrom', 'dateTo', 'callsAccepted', 'callsMissed'
         ));
+    }
+
+    /** Идентификатор для API записи: ext_tracking_id или суффикс external_id (mts_* / mts_ac20_*). */
+    private function mtsTrackingIdForRecording(CallCenterContact $callCenterContact): ?string
+    {
+        $id = trim((string) ($callCenterContact->ext_tracking_id ?? ''));
+        if ($id !== '') {
+            return $id;
+        }
+        $external = (string) ($callCenterContact->external_id ?? '');
+        if (str_starts_with($external, 'mts_ac20_')) {
+            $rest = substr($external, strlen('mts_ac20_'));
+
+            return $rest !== '' ? $rest : null;
+        }
+        if (str_starts_with($external, 'mts_')) {
+            $rest = substr($external, 4);
+
+            return $rest !== '' ? $rest : null;
+        }
+
+        return null;
     }
 }

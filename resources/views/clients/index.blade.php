@@ -13,13 +13,14 @@
     <div class="col-auto"><button type="submit" class="btn btn-sm btn-secondary">Найти</button></div>
 </form>
 <table class="table table-hover">
-    <thead><tr><th>Клиент</th><th>Тип</th><th>Телефон</th><th>Email</th><th>Чёрный список</th><th></th></tr></thead>
+    <thead><tr><th>Клиент</th><th>Тип</th><th>Телефон</th><th>Паспорт</th><th>Email</th><th>Чёрный список</th><th></th></tr></thead>
     <tbody>
         @foreach($clients as $c)
         <tr>
             <td><a href="{{ route('clients.show', $c) }}">{{ $c->full_name }}</a></td>
             <td>@if($c->isLegal())<span class="badge bg-secondary">Юр. лицо</span>@else<span class="badge bg-light text-dark">Физ. лицо</span>@endif</td>
             <td>{{ $c->phone }}</td>
+            <td>@if(!$c->isLegal() && $c->passport_data)<span class="text-muted small">{{ $c->passport_data }}</span>@else—@endif</td>
             <td>{{ $c->email }}</td>
             <td>@if($c->blacklist_flag)<span class="badge bg-danger">Да</span>@else—@endif</td>
             <td>

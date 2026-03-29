@@ -18,17 +18,15 @@ class PurchaseContract extends Model
     }
 
     protected $fillable = [
-        'contract_number', 'client_id', 'item_id', 'appraiser_id', 'store_id',
+        'contract_number', 'lmb_doc_uid', 'lmb_data', 'client_id', 'item_id', 'appraiser_id', 'store_id',
         'purchase_amount', 'purchase_date',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'purchase_date' => 'date',
-            'purchase_amount' => 'decimal:2',
-        ];
-    }
+    protected $casts = [
+        'purchase_date' => 'date',
+        'purchase_amount' => 'decimal:2',
+        'lmb_data' => 'array',
+    ];
 
     public function client()
     {
@@ -61,6 +59,7 @@ class PurchaseContract extends Model
         if ($last && preg_match('/S-\d{4}-(\d+)/', $last, $m)) {
             $num = (int) $m[1] + 1;
         }
+
         return sprintf('S-%s-%05d', $year, $num);
     }
 }

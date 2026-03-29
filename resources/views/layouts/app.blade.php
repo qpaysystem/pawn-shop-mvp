@@ -39,13 +39,45 @@
         .app-sidebar .navbar-brand:hover { color: var(--lombard-accent-hover); }
         .app-sidebar .nav-link {
             color: rgba(255,255,255,0.9);
-            padding: 0.5rem 0.75rem;
-            border-radius: 6px;
+            padding: 0.65rem 0.85rem;
+            border-radius: 8px;
             transition: color 0.2s, background 0.2s;
             white-space: nowrap;
         }
         .app-sidebar .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .app-sidebar .nav-link i { opacity: 0.9; margin-right: 0.5rem; flex-shrink: 0; }
+        /* Единый шаг между всеми пунктами левого меню */
+        .app-sidebar .sidebar-menu-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .app-sidebar .sidebar-menu-inner {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .app-sidebar .sidebar-menu-stack .nav-item,
+        .app-sidebar .sidebar-menu-inner .nav-item { margin: 0; }
+        .app-sidebar .sidebar-link-muted {
+            color: rgba(255,255,255,0.65);
+            font-size: 0.875rem;
+        }
+        .app-sidebar .sidebar-link-muted:hover { color: #fff; }
+        .app-sidebar .sidebar-link-highlight {
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+            font-weight: 500;
+        }
+        .app-sidebar .sidebar-link-highlight:hover {
+            background: rgba(255,255,255,0.18);
+            color: #fff;
+        }
+        .app-sidebar hr.sidebar-footer-rule {
+            margin: 0.75rem 0;
+            border-color: rgba(255,255,255,0.2);
+            opacity: 1;
+        }
         .app-sidebar .nav-group-toggle {
             font-size: 0.7rem;
             font-weight: 600;
@@ -74,6 +106,23 @@
         .app-sidebar .nav-group-items { padding-left: 0; list-style: none; }
         .app-sidebar .nav-group-items .nav-item { margin-bottom: 0; }
         .app-sidebar hr { border-color: rgba(255,255,255,0.2); }
+        .app-sidebar .nav-link.section-nav-link.active {
+            background: rgba(255,255,255,0.22);
+            font-weight: 600;
+        }
+        .section-hub-card-link { color: inherit; }
+        .section-hub-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .section-hub-card-link:hover .section-hub-card {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1.25rem rgba(34, 77, 102, 0.12) !important;
+        }
+        .section-hub-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(34, 77, 102, 0.1);
+            color: var(--lombard-primary);
+            font-size: 1.35rem;
+        }
         .app-sidebar .btn-outline-light {
             border-color: rgba(255,255,255,0.5);
             color: #fff;
@@ -303,70 +352,67 @@
     </header>
     <div class="app-sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
     <nav class="navbar navbar-dark flex-column align-items-stretch p-3 app-sidebar" id="app-sidebar">
-        <a class="navbar-brand mb-3" href="{{ route('dashboard') }}">{{ config('services.lombard.name', 'Ломбард') }}</a>
-        <a class="nav-link text-white-50 small mb-2" href="{{ route('home') }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> На сайт</a>
-        <a class="nav-link mb-2 py-2 rounded bg-white bg-opacity-10 text-white" href="{{ route('appraiser.home') }}"><i class="bi bi-phone"></i> Оценщик</a>
-        <ul class="nav flex-column">
-            <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-clients" aria-expanded="true" aria-controls="sidebar-group-clients"><i class="bi bi-people-fill nav-group-toggle-icon"></i><span>Работа с клиентами</span><i class="bi bi-chevron-down"></i></button>
-                <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-clients">
-                    <li class="nav-item"><a class="nav-link" href="{{ route('dashboard') }}"><i class="bi bi-grid"></i> Дашборд</a></li>
-                    @auth
-                    @if(auth()->user()->canCreateContracts())
-                    <li class="nav-item"><a class="nav-link" href="{{ route('accept.create') }}"><i class="bi bi-plus-circle"></i> Приём товара</a></li>
-                    @endif
-                    @endauth
-                    <li class="nav-item"><a class="nav-link" href="{{ route('clients.index') }}"><i class="bi bi-people"></i> Клиенты</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('items.index') }}"><i class="bi bi-box-seam"></i> Товары</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('pawn-contracts.index') }}"><i class="bi bi-file-text"></i> Договоры залога</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('commission-contracts.index') }}"><i class="bi bi-file-earmark-text"></i> Договоры комиссии</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('purchase-contracts.index') }}"><i class="bi bi-cash-coin"></i> Договоры скупки</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('call-center.index') }}"><i class="bi bi-telephone-inbound"></i> Колл-центр</a></li>
-                </ul>
-            </li>
-
-            <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-marketing" aria-expanded="true" aria-controls="sidebar-group-marketing"><i class="bi bi-graph-up-arrow nav-group-toggle-icon"></i><span>Маркетинг</span><i class="bi bi-chevron-down"></i></button>
-                <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-marketing">
-                    <li class="nav-item"><a class="nav-link" href="{{ route('marketing.index') }}"><i class="bi bi-bar-chart-line"></i> Маркетинг</a></li>
-                </ul>
-            </li>
-
-            <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-finance" aria-expanded="true" aria-controls="sidebar-group-finance"><i class="bi bi-wallet2 nav-group-toggle-icon"></i><span>Финансы</span><i class="bi bi-chevron-down"></i></button>
-                <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-finance">
-                    @if(auth()->user() && auth()->user()->canProcessSales())
-                    <li class="nav-item"><a class="nav-link" href="{{ route('cash.index') }}"><i class="bi bi-cash-stack"></i> Касса</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('cash.report') }}"><i class="bi bi-bar-chart"></i> Отчёт по кассам</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('expenses.index') }}"><i class="bi bi-cash-expense"></i> Расходы</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('employees.index') }}"><i class="bi bi-currency-dollar"></i> ФОТ</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('bank-accounts.index') }}"><i class="bi bi-bank"></i> Банк</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('documents.index') }}"><i class="bi bi-files"></i> Все документы</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('chart-of-accounts.index') }}"><i class="bi bi-journal-ruled"></i> План счетов</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('document-ledger-templates.index') }}"><i class="bi bi-journal-check"></i> Шаблоны проводок</a></li>
-                    @endif
-                </ul>
-            </li>
-
-            <li>
-                <button class="nav-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-group-settings" aria-expanded="true" aria-controls="sidebar-group-settings"><i class="bi bi-gear nav-group-toggle-icon"></i><span>Настройки</span><i class="bi bi-chevron-down"></i></button>
-                <ul class="nav flex-column collapse show nav-group-items" id="sidebar-group-settings">
-                    <li class="nav-item"><a class="nav-link" href="{{ route('item-categories.index') }}"><i class="bi bi-tags"></i> Категории</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('brands.index') }}"><i class="bi bi-award"></i> Бренды</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('item-statuses.index') }}"><i class="bi bi-flag"></i> Статусы товара</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('storage-locations.index') }}"><i class="bi bi-geo-alt"></i> Места хранения</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('kb.index') }}"><i class="bi bi-journal-bookmark"></i> База знаний</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('profile.show') }}"><i class="bi bi-person"></i> Профиль</a></li>
-                    @auth
-                    @if(auth()->user()->isSuperAdmin())
-                    <li class="nav-item"><a class="nav-link" href="{{ route('stores.index') }}"><i class="bi bi-shop"></i> Магазины</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('users.index') }}"><i class="bi bi-person-gear"></i> Пользователи</a></li>
-                    @endif
-                    @endauth
-                </ul>
-            </li>
-        </ul>
-        <hr class="my-3">
+        <a class="navbar-brand mb-2 pb-1 border-bottom border-light border-opacity-25" href="{{ route('dashboard') }}">{{ config('services.lombard.name', 'Ломбард') }}</a>
+        @php
+            $isClientsSection = request()->routeIs([
+                'section.clients',
+                'accept.*',
+                'clients.*',
+                'items.*',
+                'pawn-contracts.*',
+                'commission-contracts.*',
+                'purchase-contracts.*',
+                'call-center.*',
+            ]);
+            $isMarketingSection = request()->routeIs(['section.marketing', 'marketing.*']);
+            $isFinanceSection = request()->routeIs([
+                'section.finance',
+                'cash.*',
+                'expenses.*',
+                'expense-types.*',
+                'employees.*',
+                'payroll-accruals.*',
+                'bank-accounts.*',
+                'documents.*',
+                'chart-of-accounts.*',
+                'document-ledger-templates.*',
+                'document-ledger-entries.*',
+            ]);
+            $isSettingsSection = request()->routeIs([
+                'section.settings',
+                'item-categories.*',
+                'brands.*',
+                'item-statuses.*',
+                'storage-locations.*',
+                'profile.*',
+                'stores.*',
+                'users.*',
+                'kb.categories.*',
+                'kb.articles.*',
+            ]);
+        @endphp
+        <div class="sidebar-menu-stack">
+            <a class="nav-link sidebar-link-muted" href="{{ route('home') }}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> На сайт</a>
+            <a class="nav-link sidebar-link-highlight" href="{{ route('appraiser.home') }}"><i class="bi bi-phone"></i> Оценщик</a>
+            <ul class="sidebar-menu-inner list-unstyled p-0 m-0 w-100">
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><i class="bi bi-grid-1x2"></i> Дашборд</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ $isClientsSection ? 'active' : '' }}" href="{{ route('section.clients') }}"><i class="bi bi-people-fill"></i> Работа с клиентами</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ $isMarketingSection ? 'active' : '' }}" href="{{ route('section.marketing') }}"><i class="bi bi-graph-up-arrow"></i> Маркетинг</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ $isFinanceSection ? 'active' : '' }}" href="{{ route('section.finance') }}"><i class="bi bi-wallet2"></i> Финансы</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ $isSettingsSection ? 'active' : '' }}" href="{{ route('section.settings') }}"><i class="bi bi-gear"></i> Настройки</a>
+                </li>
+            </ul>
+        </div>
+        <hr class="sidebar-footer-rule">
         <form method="post" action="{{ route('logout') }}">
             @csrf
             <button type="submit" class="btn btn-outline-light btn-sm w-100"><i class="bi bi-box-arrow-right"></i> Выход</button>
@@ -390,35 +436,6 @@
     @endif
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-      (function () {
-        var STORAGE_KEY = 'sidebar-groups';
-        var ids = ['sidebar-group-clients', 'sidebar-group-marketing', 'sidebar-group-finance', 'sidebar-group-settings'];
-        try {
-          var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-          ids.forEach(function (id) {
-            var el = document.getElementById(id);
-            if (!el) return;
-            if (saved[id] === false) {
-              el.classList.remove('show');
-              var btn = document.querySelector('[data-bs-target="#' + id + '"]');
-              if (btn) btn.setAttribute('aria-expanded', 'false');
-            }
-          });
-        } catch (e) {}
-        ids.forEach(function (id) {
-          var el = document.getElementById(id);
-          if (!el) return;
-          el.addEventListener('show.bs.collapse', function () { save(id, true); });
-          el.addEventListener('hide.bs.collapse', function () { save(id, false); });
-        });
-        function save(id, open) {
-          try {
-            var o = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            o[id] = open;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
-          } catch (e) {}
-        }
-      })();
       (function () {
         var btn = document.getElementById('sidebar-toggle');
         var overlay = document.getElementById('sidebar-overlay');

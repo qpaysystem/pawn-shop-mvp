@@ -6,21 +6,42 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-/** Запрос данных карточки организации в 2ГИС (Places API: рейтинг, отзывы, название). */
+/** Запрос данных карточки организации в 2ГИС (Places API: рейтинг, отзывы, название). Поддержка нескольких филиалов. */
 class TwoGisApiService
 {
-    public function getBranchInfo(): ?array
+    /** Возвращает массив данных по всем настроенным филиалам (без null). */
+    public function getBranchesInfo(): array
     {
         $key = config('services.dgis.api_key');
-        $branchId = config('services.dgis.branch_id');
-        if (empty($key) || empty($branchId)) {
-            return null;
+        $branchIds = config('services.dgis.branch_ids', []);
+        if (empty($key) || empty($branchIds)) {
+            return [];
         }
 
-        $cacheKey = 'marketing_2gis_branch_' . md5($branchId);
-        return Cache::remember($cacheKey, now()->addHour(), function () use ($key, $branchId) {
-            return $this->fetchBranch($key, $branchId);
-        });
+        $result = [];
+        foreach ($branchIds as $branchId) {
+            $branchId = trim($branchId);
+            if ($branchId === '') {
+                continue;
+            }
+            $cacheKey = 'marketing_2gis_branch_'.md5($branchId);
+            $info = Cache::remember($cacheKey, now()->addHour(), function () use ($key, $branchId) {
+                return $this->fetchBranch($key, $branchId);
+            });
+            if ($info !== null) {
+                $result[] = $info;
+            }
+        }
+
+        return $result;
+    }
+
+    /** Один филиал (первый из списка) — для обратной совместимости. */
+    public function getBranchInfo(): ?array
+    {
+        $branches = $this->getBranchesInfo();
+
+        return $branches[0] ?? null;
     }
 
     public function fetchBranch(string $apiKey, string $branchId): ?array
@@ -35,7 +56,8 @@ class TwoGisApiService
             ]);
 
         if (! $response->successful()) {
-            Log::warning('TwoGisApiService: HTTP ' . $response->status(), ['body' => $response->body()]);
+            Log::warning('TwoGisApiService: HTTP '.$response->status(), ['body' => $response->body()]);
+
             return null;
         }
 
@@ -56,7 +78,7 @@ class TwoGisApiService
         }
         $link = $item['url'] ?? null;
         if (empty($link) && ! empty($item['id'])) {
-            $link = 'https://2gis.ru/firm/' . $item['id'];
+            $link = 'https://2gis.ru/firm/'.$item['id'];
         }
 
         return [
@@ -72,9 +94,11 @@ class TwoGisApiService
     /** Сброс кэша (после обновления настроек или по кнопке «Обновить»). */
     public function clearCache(): void
     {
-        $branchId = config('services.dgis.branch_id');
-        if ($branchId) {
-            Cache::forget('marketing_2gis_branch_' . md5($branchId));
+        $branchIds = config('services.dgis.branch_ids', []);
+        foreach ($branchIds as $branchId) {
+            if (trim($branchId) !== '') {
+                Cache::forget('marketing_2gis_branch_'.md5(trim($branchId)));
+            }
         }
     }
 }

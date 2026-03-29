@@ -6,12 +6,13 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Транскрипция записи разговора: Whisper (OpenAI) — аудио в текст, DeepSeek — оформление текста.
+ * Транскрипция записи: Whisper (OpenAI) + оформление через OpenAI Chat Completions.
+ * Готовую расшифровку из МТС AC20 (GET /stt/result) подставляет CallCenterController до вызова этого сервиса.
  */
 class CallRecordingTranscriptionService
 {
     /**
-     * Транскрибировать аудиофайл и оформить текст через DeepSeek.
+     * Транскрибировать аудио (Whisper) и оформить текст через OpenAI.
      * Возвращает итоговый текст или null при ошибке.
      */
     public function transcribeAndFormat(string $audioPath): ?string
@@ -20,7 +21,8 @@ class CallRecordingTranscriptionService
         if ($raw === null || trim($raw) === '') {
             return null;
         }
-        $formatted = $this->formatWithDeepSeek($raw);
+        $formatted = $this->formatWithOpenAi($raw);
+
         return $formatted !== null ? $formatted : $raw;
     }
 
@@ -32,6 +34,7 @@ class CallRecordingTranscriptionService
         $apiKey = config('services.openai.api_key');
         if (empty($apiKey) || ! is_readable($audioPath)) {
             Log::debug('CallRecordingTranscription: пропуск Whisper', ['reason' => empty($apiKey) ? 'no key' : 'file unreadable']);
+
             return null;
         }
 
@@ -46,19 +49,21 @@ class CallRecordingTranscriptionService
 
         if (! $response->successful()) {
             Log::warning('Whisper API ошибка', ['status' => $response->status(), 'body' => $response->body()]);
+
             return null;
         }
 
         $text = $response->body();
+
         return is_string($text) && trim($text) !== '' ? trim($text) : null;
     }
 
     /**
-     * Оформление сырой расшифровки через DeepSeek: пунктуация, абзацы по репликам.
+     * Оформление сырой расшифровки через OpenAI: пунктуация, реплики «Клиент:» / «Оператор:».
      */
-    public function formatWithDeepSeek(string $rawTranscript): ?string
+    public function formatWithOpenAi(string $rawTranscript): ?string
     {
-        $apiKey = config('services.deepseek.api_key');
+        $apiKey = config('services.openai.api_key');
         if (empty($apiKey)) {
             return null;
         }
@@ -75,10 +80,10 @@ class CallRecordingTranscriptionService
 PROMPT;
 
         try {
-            $model = config('services.deepseek.model', 'deepseek-chat');
+            $model = config('services.openai.model', 'gpt-4o-mini');
             $response = Http::timeout(60)
                 ->withToken($apiKey)
-                ->post('https://api.deepseek.com/v1/chat/completions', [
+                ->post('https://api.openai.com/v1/chat/completions', [
                     'model' => $model,
                     'messages' => [
                         ['role' => 'user', 'content' => $prompt],
@@ -88,14 +93,17 @@ PROMPT;
                 ]);
 
             if (! $response->successful()) {
-                Log::warning('DeepSeek API ошибка (транскрипция)', ['status' => $response->status(), 'body' => $response->body()]);
+                Log::warning('OpenAI API ошибка (оформление транскрипции)', ['status' => $response->status(), 'body' => $response->body()]);
+
                 return null;
             }
 
             $content = $response->json('choices.0.message.content');
+
             return $content !== null && trim((string) $content) !== '' ? trim((string) $content) : null;
         } catch (\Throwable $e) {
-            Log::warning('DeepSeek при оформлении транскрипции', ['error' => $e->getMessage()]);
+            Log::warning('OpenAI при оформлении транскрипции', ['error' => $e->getMessage()]);
+
             return null;
         }
     }
