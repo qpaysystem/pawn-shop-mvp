@@ -105,6 +105,103 @@
         "reveal": "always",
         "panel": "shared"
       }
+    },
+    {
+      "label": "MTS: debug-response (проверка API)",
+      "type": "shell",
+      "command": "php artisan mts:debug-response --days=${input:mtsDebugDays}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "MTS: list-trunks (нужен Domain в .env или --domain)",
+      "type": "shell",
+      "command": "php artisan mts:debug-response --list-trunks --domain=${input:mtsAc20Domain}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "MTS: sync-calls в БД (дней)",
+      "type": "shell",
+      "command": "php artisan mts:sync-calls --days=${input:mtsSyncDays}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Laravel: config clear",
+      "type": "shell",
+      "command": "php artisan config:clear",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Deploy: SSH — git pull + deploy.sh",
+      "type": "shell",
+      "command": "ssh ${input:deploySshTarget} 'cd ${input:deployRemoteDir} && git pull origin main && export PHP=/usr/bin/php && ./deploy.sh'",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "mtsDebugDays",
+      "type": "promptString",
+      "description": "Период для mts:debug-response (дней назад)",
+      "default": "7"
+    },
+    {
+      "id": "mtsSyncDays",
+      "type": "promptString",
+      "description": "Загрузить звонки за сколько дней",
+      "default": "7"
+    },
+    {
+      "id": "mtsAc20Domain",
+      "type": "promptString",
+      "description": "Domain AC20 (FQDN из ЛК aa.mts.ru)",
+      "default": ""
+    },
+    {
+      "id": "deploySshTarget",
+      "type": "promptString",
+      "description": "SSH: логин@хост (как после ssh)",
+      "default": "u1234567@ваш-сервер.timeweb.ru"
+    },
+    {
+      "id": "deployRemoteDir",
+      "type": "promptString",
+      "description": "Каталог проекта на сервере",
+      "default": "~/pawn-shop-mvp"
     }
   ]
 }
