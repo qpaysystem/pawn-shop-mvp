@@ -9,6 +9,7 @@
 #
 # На сервере: бэкап .env, удаляются только строки, начинающиеся с MTS_,
 # затем дописывается блок из локального .env, затем config:clear.
+# Один SSH-сеанс (без scp) — при входе по паролю запрос будет один раз.
 
 DEPLOY_SSH="${DEPLOY_SSH:-ЛОГИН@ХОСТ.timeweb.ru}"
 DEPLOY_DIR="${DEPLOY_DIR:-~/pawn-shop-mvp}"
@@ -32,9 +33,22 @@ grep -E '^MTS_[A-Za-z0-9_]+=' .env > "$FRAG" || {
   exit 1
 }
 
-echo "Копирую блок MTS на ${DEPLOY_SSH}:${DEPLOY_DIR}/.env …"
-scp -q "$FRAG" "${DEPLOY_SSH}:${REMOTE_FRAG}"
-
-ssh -q "$DEPLOY_SSH" "cd ${DEPLOY_DIR} && test -f .env || { echo 'Нет .env'; exit 1; } && cp .env .env.bak.\$(date +%Y%m%d%H%M%S) && grep -v '^MTS_' .env > .env.new && cat ${REMOTE_FRAG} >> .env.new && mv .env.new .env && rm -f ${REMOTE_FRAG} && ${PHP_BIN} artisan config:clear"
+echo "Копирую блок MTS на ${DEPLOY_SSH}:${DEPLOY_DIR}/.env (один SSH)…"
+DELIM="PWN_MTS_ENV_EOF_$(date +%s)_${RANDOM}_$$"
+{
+  printf '%s\n' "set -euo pipefail"
+  printf '%s\n' "cd ${DEPLOY_DIR} || exit 1"
+  printf '%s\n' "FR=${REMOTE_FRAG}"
+  printf '%s\n' "cat > \"\$FR\" <<'${DELIM}'"
+  cat "$FRAG"
+  printf '\n%s\n' "${DELIM}"
+  printf '%s\n' "test -f .env || { echo 'Нет .env'; exit 1; }"
+  printf '%s\n' "cp .env .env.bak.\$(date +%Y%m%d%H%M%S)"
+  printf '%s\n' "grep -v '^MTS_' .env > .env.new"
+  printf '%s\n' "cat \"\$FR\" >> .env.new"
+  printf '%s\n' "mv .env.new .env"
+  printf '%s\n' "rm -f \"\$FR\""
+  printf '%s\n' "\"${PHP_BIN}\" artisan config:clear"
+} | ssh -q "$DEPLOY_SSH" bash
 
 echo "Готово. Проверка на сервере: ${PHP_BIN} artisan mts:debug-response --days=7"
