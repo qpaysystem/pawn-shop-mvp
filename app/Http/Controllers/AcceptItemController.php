@@ -225,7 +225,7 @@ class AcceptItemController extends Controller
                 'storage_location_id' => $request->storage_location_id ? (int) $request->storage_location_id : null,
                 'status_id' => (int) $request->status_id,
                 'barcode' => Item::generateBarcode(),
-                'photos' => $photos ? json_encode($photos) : null,
+                'photos' => $photos !== [] ? $photos : null,
                 'initial_price' => $request->initial_price ? (float) $request->initial_price : null,
                 'current_price' => $request->current_price ? (float) $request->current_price : (float) ($request->initial_price ?: 0),
             ]);
@@ -428,84 +428,489 @@ class AcceptItemController extends Controller
         if (! Auth::user()->canCreateContracts()) {
             abort(403);
         }
-        $request->validate([
-            'photo' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
-        ]);
 
-        $deepseekKey = config('services.deepseek.api_key');
-        $geminiKey = config('services.gemini.api_key');
-        $visionKey = config('services.google_vision.api_key');
+        $uploadError = $this->passportPhotoUploadErrorResponse($request);
+        if ($uploadError !== null) {
+            return $uploadError;
+        }
 
-        if (($deepseekKey === '' || $deepseekKey === null) && ($geminiKey === '' || $geminiKey === null) && ($visionKey === '' || $visionKey === null)) {
+        try {
+            $request->validate([
+                'photo' => 'required|file|max:15360',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $msg = $this->translatePassportUploadValidationMessage(
+                collect($e->errors())->flatten()->first() ?? 'Некорректный файл фото'
+            );
+
             return response()->json([
-                'error' => 'Укажите DEEPSEEK_API_KEY, GEMINI_API_KEY или GOOGLE_VISION_API_KEY в .env. На боевом после изменения .env выполните: php artisan config:clear',
+                'error' => $msg,
                 'passport_data' => '',
+                'success' => false,
             ], 422);
         }
 
-        $file = $request->file('photo');
-        $fullPath = $file->getRealPath();
-        if (! is_file($fullPath)) {
+        $openaiKey = config('services.openai.api_key');
+        $deepseekKey = config('services.deepseek.api_key');
+        $geminiKey = config('services.gemini.api_key');
+        $visionKey = config('services.google_vision.api_key');
+        $useDeepseekVision = filter_var(env('DEEPSEEK_VISION', false), FILTER_VALIDATE_BOOL);
+
+        if (! $this->canRunPassportRecognition($openaiKey, $deepseekKey, $geminiKey, $visionKey)) {
             return response()->json([
-                'error' => 'Файл недоступен после загрузки.',
+                'error' => 'На сервере нет OCR: установите Tesseract в контейнер или добавьте GEMINI_API_KEY в app/.env (https://aistudio.google.com/apikey), затем php artisan config:clear',
                 'passport_data' => '',
+                'success' => false,
             ], 422);
         }
 
         try {
-            // 1. Deep Seek Vision — анализ фото и извлечение ФИО в одном запросе
-            if ($deepseekKey !== '' && $deepseekKey !== null) {
-                $deepseekResult = $this->runDeepSeekVisionExtract($fullPath, $deepseekKey);
-                if ($deepseekResult !== null) {
-                    return response()->json([
-                        'passport_data' => $deepseekResult['raw_text'] ?? '',
-                        'success' => true,
-                        'fields' => $deepseekResult['fields'],
-                        'parsed_by' => 'deepseek',
-                        'llm_error' => null,
-                    ]);
+            $imagePath = $this->preparePassportImageForOcr($request->file('photo'));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'passport_data' => '',
+                'success' => false,
+            ], 422);
+        }
+
+        $ocrErrors = [];
+
+        try {
+            // 1. Gemini Vision — предпочтительно для серверов в РФ (OpenAI часто блокирует регион)
+            if ($geminiKey !== '' && $geminiKey !== null) {
+                $geminiVision = $this->runGeminiPassportVisionExtract($imagePath, $geminiKey, $ocrErrors);
+                if ($geminiVision !== null) {
+                    return $this->passportParseSuccessResponse($geminiVision, 'gemini');
                 }
-                // Deep Seek не сработал — идём в fallback
             }
 
-            // 2. Fallback: Gemini / Vision OCR → OpenAI / regex
-            $text = $geminiKey !== '' && $geminiKey !== null
-                ? $this->runGeminiOcr($fullPath, $geminiKey)
-                : $this->runGoogleVisionOcr($fullPath, $visionKey);
-            $text = $this->cleanOcrPassportText($text ?? '');
-            $llmResult = $this->parsePassportWithLlm($text);
-            $llmError = null;
-            if ($llmResult !== null && ($llmResult['ok'] ?? false) && ! empty($llmResult['fields'])) {
-                $fields = $llmResult['fields'];
-                $parsedBy = $llmResult['provider'] ?? 'openai';
-            } else {
-                $fields = $this->parsePassportFields($text);
-                $parsedBy = 'regex';
-                if ($llmResult !== null && isset($llmResult['reason'])) {
-                    $llmError = $llmResult['message'] ?? $llmResult['reason'];
+            // 2. OpenAI Vision
+            if ($openaiKey !== '' && $openaiKey !== null) {
+                $openaiVision = $this->runOpenAiVisionExtract($imagePath, $openaiKey, $ocrErrors);
+                if ($openaiVision !== null) {
+                    return $this->passportParseSuccessResponse($openaiVision, 'openai');
                 }
             }
+
+            // 2. Deep Seek Vision — только если явно включено (deepseek-chat не принимает image_url)
+            if ($useDeepseekVision && $deepseekKey !== '' && $deepseekKey !== null) {
+                $deepseekResult = $this->runDeepSeekVisionExtract($imagePath, $deepseekKey);
+                if ($deepseekResult !== null) {
+                    return $this->passportParseSuccessResponse($deepseekResult, 'deepseek');
+                }
+                $ocrErrors[] = 'Deep Seek Vision: модель не поддерживает фото или ошибка API';
+            }
+
+            // 3. Локальный Tesseract (без облачных ключей) + Deep Seek / regex
+            $tesseractText = $this->runTesseractOcr($imagePath, $ocrErrors);
+            if ($tesseractText !== null && strlen(trim($tesseractText)) >= 5) {
+                return $this->passportParseFromOcrText($tesseractText, 'tesseract');
+            }
+
+            // 4. Gemini OCR
+            if ($geminiKey !== '' && $geminiKey !== null) {
+                $geminiText = $this->runGeminiOcr($imagePath, $geminiKey, $ocrErrors);
+                if ($geminiText !== null && strlen(trim($geminiText)) >= 5) {
+                    return $this->passportParseFromOcrText($geminiText, 'gemini');
+                }
+            }
+
+            // 5. Google Vision OCR
+            if ($visionKey !== '' && $visionKey !== null) {
+                $visionText = $this->runGoogleVisionOcr($imagePath, $visionKey, $ocrErrors);
+                if ($visionText !== null && strlen(trim($visionText)) >= 5) {
+                    return $this->passportParseFromOcrText($visionText, 'vision');
+                }
+            }
+
+            $hint = implode(' ', $ocrErrors);
+            $setup = [];
+            if (! $this->isTesseractAvailable()) {
+                $setup[] = 'установите Tesseract в PHP-контейнер (tesseract-ocr, tesseract-ocr-rus)';
+            }
+            if (($geminiKey === '' || $geminiKey === null) && ! $this->isTesseractAvailable()) {
+                $setup[] = 'или добавьте GEMINI_API_KEY в app/.env (https://aistudio.google.com/apikey)';
+            }
+            $setupHint = $setup !== [] ? ' ' . implode('; ', $setup) . '.' : '';
+
             return response()->json([
-                'passport_data' => $text,
-                'success' => true,
-                'fields' => $fields,
-                'parsed_by' => $parsedBy,
-                'llm_error' => $llmError,
-            ]);
+                'error' => 'Не удалось распознать паспорт.'
+                    . $setupHint
+                    . ($hint !== '' ? ' ' . mb_substr($hint, 0, 200) : '')
+                    . ' Сделайте чёткое фото разворота (JPEG), без бликов, хорошее освещение.',
+                'passport_data' => '',
+                'success' => false,
+            ], 422);
         } catch (\Throwable $e) {
-            \Log::warning('Passport OCR error', [
+            Log::warning('Passport OCR error', [
                 'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
             $msg = $e->getMessage();
             if (str_contains($msg, 'Connection') || str_contains($msg, 'cURL') || str_contains($msg, 'SSL') || str_contains($msg, 'timed out')) {
-                $msg = 'Нет доступа к сервису распознавания с сервера (сеть или SSL). Проверьте исходящие запросы и при необходимости выполните на сервере: php artisan config:clear';
+                $msg = 'Нет доступа к сервису распознавания с сервера. Проверьте интернет и OPENAI_API_KEY.';
             }
+
             return response()->json([
                 'error' => $msg,
                 'passport_data' => '',
+                'success' => false,
             ], 422);
         }
+    }
+
+    /**
+     * @param  array{raw_text?: string, fields: array<string, string>}  $result
+     */
+    private function passportParseSuccessResponse(array $result, string $parsedBy): \Illuminate\Http\JsonResponse
+    {
+        $fields = $result['fields'] ?? [];
+        $raw = $result['raw_text'] ?? $this->formatPassportDataFromFields($fields);
+
+        return response()->json([
+            'passport_data' => $raw,
+            'success' => true,
+            'fields' => $fields,
+            'parsed_by' => $parsedBy,
+            'llm_error' => null,
+        ]);
+    }
+
+    private function passportParseFromOcrText(string $text, string $parsedBy): \Illuminate\Http\JsonResponse
+    {
+        $text = $this->cleanOcrPassportText($text);
+        $llmResult = $this->parsePassportWithLlm($text);
+        $llmError = null;
+        if ($llmResult !== null && ($llmResult['ok'] ?? false) && ! empty($llmResult['fields'])) {
+            $fields = $llmResult['fields'];
+            $parsedBy = $llmResult['provider'] ?? $parsedBy;
+        } else {
+            $fields = $this->parsePassportFields($text);
+            $parsedBy = $parsedBy === 'gemini' ? 'gemini+regex' : 'regex';
+            if ($llmResult !== null && isset($llmResult['message'])) {
+                $llmError = $llmResult['message'];
+            }
+        }
+
+        return response()->json([
+            'passport_data' => $text,
+            'success' => true,
+            'fields' => $fields,
+            'parsed_by' => $parsedBy,
+            'llm_error' => $llmError,
+        ]);
+    }
+
+    /** @param  array<string, string>  $fields */
+    private function formatPassportDataFromFields(array $fields): string
+    {
+        $parts = array_filter([
+            $fields['last_name'] ?? '',
+            $fields['first_name'] ?? '',
+            $fields['patronymic'] ?? '',
+            $fields['passport_series_number'] ?? '',
+            $fields['issued_by'] ?? '',
+            $fields['issued_at'] ?? '',
+        ]);
+
+        return trim(implode(' ', $parts));
+    }
+
+    /** Ошибка загрузки multipart до валидации Laravel (лимит PHP 2M и т.д.). */
+    private function passportPhotoUploadErrorResponse(Request $request): ?\Illuminate\Http\JsonResponse
+    {
+        $contentLength = (int) $request->server('CONTENT_LENGTH', 0);
+        $postMax = $this->phpIniSizeToBytes(ini_get('post_max_size') ?: '8M');
+        if ($contentLength > 0 && $contentLength > $postMax && ! $request->hasFile('photo')) {
+            return response()->json([
+                'error' => 'Запрос слишком большой для сервера (post_max_size ' . ini_get('post_max_size') . '). Уменьшите фото или увеличьте лимиты PHP.',
+                'passport_data' => '',
+                'success' => false,
+            ], 422);
+        }
+
+        if (! $request->hasFile('photo')) {
+            return response()->json([
+                'error' => 'Файл не получен сервером. Частая причина — фото больше '
+                    . (ini_get('upload_max_filesize') ?: '2M')
+                    . ' (лимит PHP). Сожмите снимок или включите docker/php/uploads.ini на сервере.',
+                'passport_data' => '',
+                'success' => false,
+            ], 422);
+        }
+
+        $file = $request->file('photo');
+        if (! $file->isValid()) {
+            $message = match ($file->getError()) {
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Фото слишком большое для сервера (макс. '
+                    . (ini_get('upload_max_filesize') ?: '2M')
+                    . '). На iPhone: «Наиболее совместимые» в настройках камеры или сожмите JPG.',
+                UPLOAD_ERR_PARTIAL => 'Файл загружен не полностью. Повторите попытку.',
+                UPLOAD_ERR_NO_FILE => 'Файл не выбран.',
+                default => 'Не удалось загрузить фото (код ' . $file->getError() . ').',
+            };
+
+            return response()->json([
+                'error' => $message,
+                'passport_data' => '',
+                'success' => false,
+            ], 422);
+        }
+
+        return null;
+    }
+
+    private function translatePassportUploadValidationMessage(string $message): string
+    {
+        if (str_contains($message, 'failed to upload')) {
+            return 'Фото не загрузилось: превышен лимит сервера ('
+                . (ini_get('upload_max_filesize') ?: '2M')
+                . '). Сожмите изображение или обратитесь к администратору.';
+        }
+
+        return $message;
+    }
+
+    private function phpIniSizeToBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return 0;
+        }
+        $unit = strtolower(substr($value, -1));
+        $num = (float) $value;
+        return match ($unit) {
+            'g' => (int) ($num * 1024 * 1024 * 1024),
+            'm' => (int) ($num * 1024 * 1024),
+            'k' => (int) ($num * 1024),
+            default => (int) $num,
+        };
+    }
+
+    /** Подготовка фото: HEIC → JPEG при необходимости. */
+    private function preparePassportImageForOcr(\Illuminate\Http\UploadedFile $file): string
+    {
+        $path = $file->getRealPath();
+        if ($path === false || ! is_file($path)) {
+            throw new \InvalidArgumentException('Файл недоступен после загрузки.');
+        }
+
+        $mime = strtolower((string) $file->getMimeType());
+        $ext = strtolower((string) $file->getClientOriginalExtension());
+
+        $okMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/jpg'];
+        if (in_array($mime, $okMimes, true) || in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+            return $path;
+        }
+
+        if (in_array($ext, ['heic', 'heif'], true) || str_contains($mime, 'heic') || str_contains($mime, 'heif')) {
+            if (extension_loaded('imagick')) {
+                $imagick = new \Imagick($path);
+                $imagick->setImageFormat('jpeg');
+                $tmp = sys_get_temp_dir() . '/passport_' . uniqid('', true) . '.jpg';
+                $imagick->writeImage($tmp);
+                $imagick->clear();
+
+                return $tmp;
+            }
+
+            throw new \InvalidArgumentException(
+                'Фото в формате HEIC с iPhone. Сделайте снимок в JPEG: Настройки → Камера → Форматы → «Наиболее совместимые», или выберите фото из «Фото» в формате JPG.'
+            );
+        }
+
+        throw new \InvalidArgumentException(
+            'Неподдерживаемый формат файла (' . ($ext ?: $mime) . '). Используйте JPEG или PNG.'
+        );
+    }
+
+    /**
+     * Распознавание паспорта через OpenAI Vision (gpt-4o-mini).
+     *
+     * @return array{raw_text: string, fields: array<string, string>}|null
+     */
+    /**
+     * Извлечение полей паспорта с фото через Gemini.
+     *
+     * @return array{raw_text: string, fields: array<string, string>}|null
+     */
+    private function runGeminiPassportVisionExtract(string $imagePath, string $apiKey, array &$ocrErrors = []): ?array
+    {
+        $payload = $this->buildVisionImagePayload($imagePath);
+        if ($payload === null) {
+            return null;
+        }
+        if (! preg_match('/^data:([^;]+);base64,(.+)$/', $payload['data_url'], $m)) {
+            return null;
+        }
+
+        $prompt = <<<'PROMPT'
+На изображении разворот паспорта РФ. Извлеки данные и верни ТОЛЬКО валидный JSON без markdown, ровно с ключами:
+last_name, first_name, patronymic, birth_date, passport_series_number, issued_by, issued_at.
+ФИО — ЗАГЛАВНЫМИ буквами. Даты — ДД.ММ.ГГГГ. Невидимые поля — "".
+PROMPT;
+
+        $model = config('services.gemini.model', 'gemini-2.0-flash');
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':generateContent?key=' . urlencode($apiKey);
+        $response = Http::timeout(45)
+            ->asJson()
+            ->post($url, [
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [
+                            ['text' => $prompt],
+                            ['inline_data' => ['mime_type' => $m[1], 'data' => $m[2]]],
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.1,
+                    'maxOutputTokens' => 1024,
+                    'responseMimeType' => 'application/json',
+                ],
+            ]);
+
+        if (! $response->successful()) {
+            $msg = $response->json('error.message') ?? $response->body();
+            $ocrErrors[] = 'Gemini: ' . (is_string($msg) ? substr($msg, 0, 200) : 'ошибка API');
+            Log::warning('Gemini passport vision', ['status' => $response->status(), 'body' => substr((string) $msg, 0, 300)]);
+
+            return null;
+        }
+
+        $content = $response->json('candidates.0.content.parts.0.text');
+        if (! is_string($content) || $content === '') {
+            return null;
+        }
+
+        $decoded = json_decode($content, true);
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $fields = $this->normalizeParsedFields([
+            'last_name' => $decoded['last_name'] ?? '',
+            'first_name' => $decoded['first_name'] ?? '',
+            'patronymic' => $decoded['patronymic'] ?? '',
+            'birth_date' => $decoded['birth_date'] ?? '',
+            'passport_series_number' => $decoded['passport_series_number'] ?? '',
+            'issued_by' => $decoded['issued_by'] ?? '',
+            'issued_at' => $decoded['issued_at'] ?? '',
+        ]);
+
+        if ($fields['last_name'] === '' && $fields['first_name'] === '' && $fields['passport_series_number'] === '') {
+            return null;
+        }
+
+        return ['raw_text' => $content, 'fields' => $fields];
+    }
+
+    private function runOpenAiVisionExtract(string $imagePath, string $apiKey, array &$ocrErrors = []): ?array
+    {
+        $payload = $this->buildVisionImagePayload($imagePath);
+        if ($payload === null) {
+            return null;
+        }
+
+        $model = config('services.openai.model', 'gpt-4o-mini');
+        if (! str_contains($model, 'gpt-4')) {
+            $model = 'gpt-4o-mini';
+        }
+
+        $prompt = <<<'PROMPT'
+На изображении разворот паспорта РФ. Извлеки данные и верни ТОЛЬКО валидный JSON без markdown и комментариев, ровно с ключами:
+- last_name: фамилия (ЗАГЛАВНЫМИ буквами)
+- first_name: имя (ЗАГЛАВНЫМИ буквами)
+- patronymic: отчество (ЗАГЛАВНЫМИ буквами)
+- birth_date: дата рождения в формате ДД.ММ.ГГГГ или пустая строка
+- passport_series_number: серия и номер паспорта
+- issued_by: кем выдан паспорт
+- issued_at: дата выдачи в формате ДД.ММ.ГГГГ или пустая строка
+
+Если поле не видно — пустая строка "". Не придумывай данные.
+PROMPT;
+
+        $response = Http::timeout(45)
+            ->withToken($apiKey)
+            ->post('https://api.openai.com/v1/chat/completions', [
+                'model' => $model,
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => [
+                            ['type' => 'text', 'text' => $prompt],
+                            ['type' => 'image_url', 'image_url' => ['url' => $payload['data_url']]],
+                        ],
+                    ],
+                ],
+                'response_format' => ['type' => 'json_object'],
+                'temperature' => 0.1,
+                'max_tokens' => 1024,
+            ]);
+
+        if (! $response->successful()) {
+            $body = $response->body();
+            Log::warning('OpenAI Vision ошибка', ['status' => $response->status(), 'body' => substr($body, 0, 500)]);
+            $errMsg = $response->json('error.message') ?? $body;
+            if (is_string($errMsg)) {
+                $ocrErrors[] = 'OpenAI: ' . substr($errMsg, 0, 200);
+            }
+
+            return null;
+        }
+
+        $content = $response->json('choices.0.message.content');
+        if (! is_string($content) || $content === '') {
+            return null;
+        }
+
+        $decoded = json_decode($content, true);
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $fields = $this->normalizeParsedFields([
+            'last_name' => $decoded['last_name'] ?? '',
+            'first_name' => $decoded['first_name'] ?? '',
+            'patronymic' => $decoded['patronymic'] ?? '',
+            'birth_date' => $decoded['birth_date'] ?? '',
+            'passport_series_number' => $decoded['passport_series_number'] ?? '',
+            'issued_by' => $decoded['issued_by'] ?? '',
+            'issued_at' => $decoded['issued_at'] ?? '',
+        ]);
+
+        if ($fields['last_name'] === '' && $fields['first_name'] === '' && $fields['passport_series_number'] === '') {
+            return null;
+        }
+
+        return ['raw_text' => $content, 'fields' => $fields];
+    }
+
+    /** @return array{data_url: string, mime: string}|null */
+    private function buildVisionImagePayload(string $imagePath): ?array
+    {
+        $content = file_get_contents($imagePath);
+        if ($content === false || strlen($content) === 0) {
+            return null;
+        }
+        $ext = strtolower(pathinfo($imagePath, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            default => 'image/jpeg',
+        };
+        if (strlen($content) > 4 * 1024 * 1024) {
+            $resized = $this->resizeImageForVision($imagePath, $content);
+            if ($resized === null) {
+                return null;
+            }
+            $content = $resized;
+            $mime = 'image/jpeg';
+        }
+
+        return ['data_url' => 'data:' . $mime . ';base64,' . base64_encode($content), 'mime' => $mime];
     }
 
     /**
@@ -803,8 +1208,101 @@ PROMPT;
         ];
     }
 
+    private function canRunPassportRecognition(?string $openaiKey, ?string $deepseekKey, ?string $geminiKey, ?string $visionKey): bool
+    {
+        if ($this->isTesseractAvailable()) {
+            return true;
+        }
+
+        return ($openaiKey !== '' && $openaiKey !== null)
+            || ($deepseekKey !== '' && $deepseekKey !== null)
+            || ($geminiKey !== '' && $geminiKey !== null)
+            || ($visionKey !== '' && $visionKey !== null);
+    }
+
+    private function isTesseractAvailable(): bool
+    {
+        static $available = null;
+        if ($available !== null) {
+            return $available;
+        }
+        exec('tesseract --version 2>/dev/null', $out, $code);
+        $available = $code === 0;
+
+        return $available;
+    }
+
+    /** Локальный OCR (Tesseract rus+eng), без облачных API. */
+    private function runTesseractOcr(string $imagePath, array &$ocrErrors = []): ?string
+    {
+        if (! $this->isTesseractAvailable()) {
+            return null;
+        }
+
+        $preparedPath = $this->prepareImageForTesseract($imagePath);
+        $outBase = sys_get_temp_dir() . '/tess_' . uniqid('', true);
+        $cmd = sprintf(
+            'tesseract %s %s -l rus+eng --oem 1 --psm 6 2>/dev/null',
+            escapeshellarg($preparedPath),
+            escapeshellarg($outBase)
+        );
+        exec($cmd, $output, $exitCode);
+        $txtPath = $outBase . '.txt';
+        $text = is_file($txtPath) ? trim((string) file_get_contents($txtPath)) : '';
+        if (is_file($txtPath)) {
+            @unlink($txtPath);
+        }
+        if ($preparedPath !== $imagePath && is_file($preparedPath)) {
+            @unlink($preparedPath);
+        }
+
+        if ($exitCode !== 0 || $text === '') {
+            if ($text === '') {
+                $ocrErrors[] = 'Tesseract: мало текста на фото';
+            }
+
+            return null;
+        }
+
+        return $text;
+    }
+
+    /** Подготовка изображения для Tesseract (масштаб, контраст). */
+    private function prepareImageForTesseract(string $imagePath): string
+    {
+        if (! function_exists('imagecreatefromjpeg')) {
+            return $imagePath;
+        }
+
+        $content = file_get_contents($imagePath);
+        if ($content === false) {
+            return $imagePath;
+        }
+
+        $resized = $this->resizeImageForVision($imagePath, $content);
+        if ($resized !== null) {
+            $content = $resized;
+        }
+
+        $img = @imagecreatefromstring($content);
+        if ($img === false) {
+            return $imagePath;
+        }
+
+        if (function_exists('imagefilter')) {
+            imagefilter($img, IMG_FILTER_GRAYSCALE);
+            imagefilter($img, IMG_FILTER_CONTRAST, -15);
+        }
+
+        $tmp = sys_get_temp_dir() . '/tess_prep_' . uniqid('', true) . '.jpg';
+        imagejpeg($img, $tmp, 92);
+        imagedestroy($img);
+
+        return is_file($tmp) ? $tmp : $imagePath;
+    }
+
     /** Распознавание через Google Cloud Vision API. */
-    private function runGoogleVisionOcr(string $imagePath, string $apiKey): ?string
+    private function runGoogleVisionOcr(string $imagePath, string $apiKey, array &$ocrErrors = []): ?string
     {
         $content = file_get_contents($imagePath);
         if ($content === false || strlen($content) === 0) {
@@ -832,21 +1330,28 @@ PROMPT;
         if (! $response->successful()) {
             $err = $response->json('error');
             $msg = $err['message'] ?? $response->body();
-            throw new \RuntimeException($msg);
+            $ocrErrors[] = is_string($msg) ? $msg : 'Google Vision API error';
+            Log::warning('Google Vision OCR', ['status' => $response->status(), 'body' => substr((string) $msg, 0, 300)]);
+
+            return null;
         }
         $data = $response->json('responses.0');
         if (empty($data)) {
             return null;
         }
         if (! empty($data['error'])) {
-            throw new \RuntimeException($data['error']['message'] ?? 'Vision API error');
+            $msg = $data['error']['message'] ?? 'Vision API error';
+            $ocrErrors[] = $msg;
+            Log::warning('Google Vision OCR response error', ['error' => $msg]);
+
+            return null;
         }
         $text = $data['fullTextAnnotation']['text'] ?? ($data['textAnnotations'][0]['description'] ?? null);
         return $text !== null ? trim((string) $text) : null;
     }
 
     /** Распознавание текста с фото через Gemini (Google AI Studio). */
-    private function runGeminiOcr(string $imagePath, string $apiKey): ?string
+    private function runGeminiOcr(string $imagePath, string $apiKey, array &$ocrErrors = []): ?string
     {
         $content = file_get_contents($imagePath);
         if ($content === false || strlen($content) === 0) {
@@ -901,7 +1406,10 @@ PROMPT;
             if (is_string($msg) && (stripos($msg, 'location') !== false || stripos($msg, 'not supported') !== false)) {
                 $msg .= ' Используйте GOOGLE_VISION_API_KEY в .env (Google Cloud Console → Vision API) и удалите или оставьте пустым GEMINI_API_KEY.';
             }
-            throw new \RuntimeException($msg);
+            $ocrErrors[] = is_string($msg) ? $msg : 'Gemini OCR error';
+            Log::warning('Gemini OCR', ['status' => $response->status(), 'body' => substr((string) $msg, 0, 300)]);
+
+            return null;
         }
         $data = $response->json();
         $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
@@ -998,8 +1506,36 @@ PROMPT;
 ---
 PROMPT;
 
-        $useDeepSeek = ($openaiKey === '' || $openaiKey === null) && ($deepseekKey !== '' && $deepseekKey !== null);
-        $apiKey = $useDeepSeek ? $deepseekKey : $openaiKey;
+        $attempts = [];
+        if ($deepseekKey !== '' && $deepseekKey !== null) {
+            $attempts[] = 'deepseek';
+        }
+        if ($openaiKey !== '' && $openaiKey !== null) {
+            $attempts[] = 'openai';
+        }
+
+        $lastError = null;
+        foreach ($attempts as $providerId) {
+            $result = $this->callPassportLlmProvider($providerId, $prompt, $providerId === 'deepseek' ? $deepseekKey : $openaiKey);
+            if ($result['ok'] ?? false) {
+                return $result;
+            }
+            $lastError = $result['message'] ?? null;
+            $msg = (string) $lastError;
+            if ($providerId === 'openai' && (str_contains($msg, 'unsupported_country') || str_contains($msg, 'Country, region'))) {
+                continue;
+            }
+        }
+
+        return ['ok' => false, 'reason' => 'api', 'message' => $lastError ?? 'LLM недоступен'];
+    }
+
+    /**
+     * @return array{ok: bool, provider?: string, fields?: array<string, string>, reason?: string, message?: string}
+     */
+    private function callPassportLlmProvider(string $providerId, string $prompt, string $apiKey): array
+    {
+        $useDeepSeek = $providerId === 'deepseek';
         $model = $useDeepSeek ? config('services.deepseek.model', 'deepseek-chat') : config('services.openai.model', 'gpt-4o-mini');
         $baseUrl = $useDeepSeek ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
         $provider = $useDeepSeek ? 'Deep Seek' : 'OpenAI';
@@ -1018,13 +1554,10 @@ PROMPT;
                 ]);
 
             if (! $response->successful()) {
-                try {
-                    Log::warning($provider . ' API ошибка', [
-                        'status' => $response->status(),
-                        'body' => $response->body(),
-                    ]);
-                } catch (\Throwable $e) {
-                }
+                Log::warning($provider . ' API ошибка', [
+                    'status' => $response->status(),
+                    'body' => substr($response->body(), 0, 500),
+                ]);
                 $errBody = $response->json();
                 $errMsg = $errBody['error']['message'] ?? $response->body();
 
@@ -1044,7 +1577,7 @@ PROMPT;
 
             return [
                 'ok' => true,
-                'provider' => $useDeepSeek ? 'deepseek' : 'openai',
+                'provider' => $providerId,
                 'fields' => $this->normalizeParsedFields([
                     'last_name' => $decoded['last_name'] ?? '',
                     'first_name' => $decoded['first_name'] ?? '',
@@ -1056,10 +1589,7 @@ PROMPT;
                 ]),
             ];
         } catch (\Throwable $e) {
-            try {
-                Log::warning($provider . ' исключение: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            } catch (\Throwable $logEx) {
-            }
+            Log::warning($provider . ' исключение: ' . $e->getMessage());
 
             return ['ok' => false, 'reason' => 'exception', 'message' => $e->getMessage()];
         }

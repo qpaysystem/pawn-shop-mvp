@@ -16,7 +16,9 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::useBootstrapFive();
 
-        if (config('app.env') === 'production') {
+        // Только если реальный URL приложения — https (Timeweb). Для LAN (http://lombard.home) не форсировать https.
+        $appUrl = (string) config('app.url', '');
+        if (config('app.env') === 'production' && str_starts_with($appUrl, 'https://')) {
             URL::forceScheme('https');
         }
     }

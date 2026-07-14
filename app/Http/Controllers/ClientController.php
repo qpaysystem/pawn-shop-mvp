@@ -15,18 +15,7 @@ class ClientController extends Controller
     {
         $query = Client::query();
         if ($request->filled('search')) {
-            $q = $request->search;
-            $query->where(function ($qry) use ($q) {
-                $qry->where('full_name', 'like', "%{$q}%")
-                    ->orWhere('phone', 'like', "%{$q}%")
-                    ->orWhere('email', 'like', "%{$q}%")
-                    ->orWhere('legal_name', 'like', "%{$q}%")
-                    ->orWhere('inn', 'like', "%{$q}%")
-                    ->orWhere('passport_data', 'like', "%{$q}%")
-                    ->orWhere('lmb_identity_document_type', 'like', "%{$q}%")
-                    ->orWhere('lmb_passport_issued_by', 'like', "%{$q}%")
-                    ->orWhere('lmb_registration_address', 'like', "%{$q}%");
-            });
+            $query->matchingSearch((string) $request->search);
         }
         if ($request->filled('blacklist')) {
             $query->where('blacklist_flag', true);
@@ -39,16 +28,12 @@ class ClientController extends Controller
     /** Поиск клиента по телефону/ФИО (для формы приёма товара). */
     public function search(Request $request)
     {
-        $q = $request->get('q', '');
-        if (strlen($q) < 2) {
+        $q = trim((string) $request->get('q', ''));
+        if (strlen($q) < Client::searchQueryMinLength($q)) {
             return response()->json([]);
         }
-        $clients = Client::where(function ($query) use ($q) {
-            $query->where('full_name', 'like', "%{$q}%")
-                ->orWhere('last_name', 'like', "%{$q}%")
-                ->orWhere('first_name', 'like', "%{$q}%")
-                ->orWhere('phone', 'like', "%{$q}%");
-        })
+        $clients = Client::query()
+            ->matchingSearch($q)
             ->limit(20)
             ->get(['id', 'full_name', 'last_name', 'first_name', 'patronymic', 'phone', 'email']);
 

@@ -21,19 +21,20 @@ class CashDocument extends Model
         'client_id',
         'operation_type_id',
         'document_number',
+        'external_id',
         'document_date',
         'amount',
         'comment',
+        'lmb_data',
         'created_by',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'document_date' => 'date',
-            'amount' => 'decimal:2',
-        ];
-    }
+    /** @var array<string, string> */
+    protected $casts = [
+        'document_date' => 'date',
+        'amount' => 'decimal:2',
+        'lmb_data' => 'array',
+    ];
 
     public function store(): BelongsTo
     {

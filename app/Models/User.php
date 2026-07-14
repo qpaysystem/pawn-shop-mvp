@@ -9,7 +9,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 /**
  * Пользователь системы (сотрудник).
- * Роль: super-admin | manager | appraiser | cashier | storekeeper
+ * Роль: super-admin | manager | appraiser | cashier | storekeeper | contact-center
  * store_id: привязка к магазину (у super-admin = null).
  */
 class User extends Authenticatable
@@ -21,10 +21,12 @@ class User extends Authenticatable
     public const ROLE_APPRAISER = 'appraiser';
     public const ROLE_CASHIER = 'cashier';
     public const ROLE_STOREKEEPER = 'storekeeper';
+    public const ROLE_CONTACT_CENTER = 'contact-center';
 
     protected $fillable = [
         'name',
         'email',
+        'telegram',
         'password',
         'role',
         'store_id',
@@ -49,6 +51,11 @@ class User extends Authenticatable
         return $this->belongsTo(Store::class);
     }
 
+    public function employee()
+    {
+        return $this->hasOne(Employee::class);
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->role === self::ROLE_SUPER_ADMIN;
@@ -58,6 +65,21 @@ class User extends Authenticatable
     public function isAppraiser(): bool
     {
         return $this->role === self::ROLE_APPRAISER;
+    }
+
+    public function isContactCenter(): bool
+    {
+        return $this->role === self::ROLE_CONTACT_CENTER;
+    }
+
+    /** Доступ к контакт-центру и колл-центру. */
+    public function canAccessContactCenter(): bool
+    {
+        return in_array($this->role, [
+            self::ROLE_CONTACT_CENTER,
+            self::ROLE_SUPER_ADMIN,
+            self::ROLE_MANAGER,
+        ], true);
     }
 
     /** Полный доступ к своему магазину (manager или super-admin). */
@@ -84,10 +106,16 @@ class User extends Authenticatable
         return in_array($this->role, [self::ROLE_SUPER_ADMIN, self::ROLE_MANAGER, self::ROLE_STOREKEEPER], true);
     }
 
+    /** Может назначать скидку на товар витрины (контакт-центр). */
+    public function canApplyVitrineDiscount(): bool
+    {
+        return $this->canAccessContactCenter();
+    }
+
     /** Список магазинов, к которым есть доступ (для super-admin — все). */
     public function allowedStoreIds(): array
     {
-        if ($this->isSuperAdmin()) {
+        if ($this->isSuperAdmin() || $this->isContactCenter()) {
             return Store::pluck('id')->all();
         }
         return $this->store_id ? [$this->store_id] : [];

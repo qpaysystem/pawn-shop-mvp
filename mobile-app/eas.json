@@ -1,0 +1,43 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://37.193.61.182:18082",
+        "EXPO_PUBLIC_USE_MOCK_API": "false",
+        "EXPO_PUBLIC_USE_MOCK_DATA": "false",
+        "EXPO_PUBLIC_APP_NAME": "Ломбард"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://37.193.61.182:18082",
+        "EXPO_PUBLIC_USE_MOCK_API": "false",
+        "EXPO_PUBLIC_USE_MOCK_DATA": "false",
+        "EXPO_PUBLIC_APP_NAME": "Ломбард"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_USE_MOCK_API": "false",
+        "EXPO_PUBLIC_USE_MOCK_DATA": "false",
+        "EXPO_PUBLIC_APP_NAME": "Ломбард"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../../../client-management-crm"
+		},
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../financial-accounting"
+		},
+		{
+			"path": "../../../crypto-trading-bot"
+		}
+	],
+	"settings": {}
+}

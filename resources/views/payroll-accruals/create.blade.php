@@ -50,7 +50,7 @@
                 </tbody>
             </table>
             @if($employees->isEmpty())
-            <p class="text-muted mb-0">Нет активных сотрудников. <a href="{{ route('employees.create') }}">Добавьте сотрудников</a>.</p>
+            <p class="text-muted mb-0">Нет активных сотрудников. <a href="{{ route('management.personnel.create') }}">Добавьте сотрудников</a>.</p>
             @endif
         </div>
     </div>

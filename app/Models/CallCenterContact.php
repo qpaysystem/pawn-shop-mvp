@@ -13,6 +13,7 @@ class CallCenterContact extends Model
     public const CHANNELS = [
         'phone' => 'Телефон',
         'telegram' => 'Telegram',
+        'avito' => 'Avito',
         'whatsapp' => 'WhatsApp',
         'vk' => 'ВКонтакте',
         'visit' => 'Личный визит',
@@ -37,14 +38,20 @@ class CallCenterContact extends Model
 
     protected $fillable = [
         'client_id', 'channel', 'direction', 'call_status', 'call_duration_sec', 'store_id', 'contact_date',
-        'contact_phone', 'contact_name', 'notes', 'outcome',
+        'contact_phone', 'line_phone', 'contact_name', 'notes', 'outcome',
         'pawn_contract_id', 'purchase_contract_id', 'commission_contract_id',
         'created_by', 'external_id', 'ext_tracking_id', 'recording_path', 'recording_transcript',
+        'portal_pushed_at', 'mts_enrich_attempts', 'mts_enrich_next_at',
     ];
 
     protected function casts(): array
     {
-        return ['contact_date' => 'datetime'];
+        return [
+            'contact_date' => 'datetime',
+            'portal_pushed_at' => 'datetime',
+            'mts_enrich_next_at' => 'datetime',
+            'mts_enrich_attempts' => 'integer',
+        ];
     }
 
     public function client()
@@ -90,6 +97,17 @@ class CallCenterContact extends Model
     public function getCallStatusLabelAttribute(): ?string
     {
         return $this->call_status ? (self::CALL_STATUSES[$this->call_status] ?? $this->call_status) : null;
+    }
+
+    /** Подпись для line_phone: на какой номер звонили / с какого звонили. */
+    public function getLinePhoneCaptionAttribute(): string
+    {
+        return $this->direction === 'outgoing' ? 'С номера' : 'На номер';
+    }
+
+    public function getDirectionLabelAttribute(): string
+    {
+        return $this->direction === 'outgoing' ? 'Исходящий' : 'Входящий';
     }
 
     /** Есть ли запись разговора (локальный файл или идентификатор MTS). */

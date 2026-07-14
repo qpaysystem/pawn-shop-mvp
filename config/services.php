@@ -9,6 +9,22 @@ return [
         'name' => env('LOMBARD_NAME', 'Ломбард'),
         'phone' => env('LOMBARD_PHONE', '+7 (383) 291-00-51'),
     ],
+    // agent-teams-portal (LAN): чтение звонков MTS из call_center_contacts
+    'agent_teams' => [
+        'api_token' => env('AGENT_TEAMS_API_TOKEN', ''),
+        'portal_base_url' => env('AGENT_TEAMS_PORTAL_URL', 'http://agent-teams.home'),
+        'notify_portal_on_transcript' => env('AGENT_TEAMS_NOTIFY_ON_TRANSCRIPT', true),
+        'notify_portal_always_on_enrich' => env('AGENT_TEAMS_NOTIFY_ALWAYS', false),
+        'notify_portal_on_telegram' => env('AGENT_TEAMS_NOTIFY_ON_TELEGRAM', true),
+    ],
+    // info.acuerdo.pro — отчёты «Текущий актив», «Текущие финансы» (как agent-teams-portal)
+    'acuerdo' => [
+        'info_base_url' => env('ACUERDO_INFO_BASE_URL', 'https://info.acuerdo.pro'),
+        'conf_base_url' => env('ACUERDO_CONF_BASE_URL', 'https://conf.nnfm.pro'),
+        'username' => env('ACUERDO_USERNAME', ''),
+        'password' => env('ACUERDO_PASSWORD', ''),
+        'meeting_room' => env('ACUERDO_MEETING_ROOM', 'Комната совещаний'),
+    ],
     'jitsi' => [
         // Базовый URL сервера Jitsi Meet (без завершающего слэша).
         // Публичный: https://meet.jit.si
@@ -28,6 +44,8 @@ return [
         // Паспорт (LLM), транскрипция звонков: Whisper + оформление текста (тот же ключ). Получить: https://platform.openai.com/api-keys
         'api_key' => env('OPENAI_API_KEY', ''),
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        // Прокси для Whisper/Chat из РФ (как в agent-teams-portal: OPENAI_HTTP_PROXY)
+        'http_proxy' => env('OPENAI_HTTP_PROXY', ''),
     ],
     'deepseek' => [
         // Распознавание и извлечение ФИО с фото паспорта (vision + структурированный вывод в одном запросе).
@@ -49,6 +67,17 @@ return [
         'ac20_base_url' => rtrim(env('MTS_AC20_BASE_URL', 'https://aa.mts.ru/api/ac20'), '/'),
         'ac20_domain' => env('MTS_AC20_DOMAIN', ''),
         'ac20_trunk_id' => preg_replace('/\D/', '', (string) env('MTS_AC20_TRUNK_ID', '')),
+        'auto_enrich_enabled' => env('MTS_AUTO_ENRICH', true),
+        'auto_enrich_per_request' => (int) env('MTS_AUTO_ENRICH_LIMIT', 100),
+        'pipeline_enabled' => env('MTS_PIPELINE_ENABLED', true),
+        'pipeline_sync_days' => (int) env('MTS_PIPELINE_SYNC_DAYS', 1),
+        'pipeline_backlog_days' => (int) env('MTS_PIPELINE_BACKLOG_DAYS', 90),
+        'pipeline_enrich_limit' => (int) env('MTS_PIPELINE_ENRICH_LIMIT', 50),
+        'pipeline_portal_push_limit' => (int) env('MTS_PIPELINE_PORTAL_PUSH_LIMIT', 50),
+        // После N неудачных попыток звонок исключается из очереди расшифровки.
+        'enrich_max_attempts' => (int) env('MTS_ENRICH_MAX_ATTEMPTS', 3),
+        // Звонки старше N дней без записи после 1 неудачи считаем безнадёжными.
+        'enrich_hopeless_after_days' => (int) env('MTS_ENRICH_HOPELESS_AFTER_DAYS', 14),
     ],
     // Выгрузка данных по контрагенту (1С). GET {base_url}/user/{phone} → JSON (user_uid, first_name, …) или {}. Basic Auth: UserWebServis / UserWebServis
     'lmb_user_api' => [

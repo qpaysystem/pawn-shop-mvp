@@ -36,8 +36,16 @@ class LmbPawnSyncService
      * @param  bool  $onlyActing  Только действующие (дата окончания >= сегодня)
      * @param  callable|null  $progress  (int $processed, int $total)
      * @param  bool  $filterByBalanceRegister  Только договоры с положительным остатком в регистре (см. balance_register в конфиге)
+     * @param  string|null  $sinceDate  Дата документа с (Y-m-d), включительно
+     * @param  string|null  $untilDate  Дата документа по (Y-m-d), включительно
      */
-    public function sync(bool $onlyActing = true, ?callable $progress = null, bool $filterByBalanceRegister = false): array
+    public function sync(
+        bool $onlyActing = true,
+        ?callable $progress = null,
+        bool $filterByBalanceRegister = false,
+        ?string $sinceDate = null,
+        ?string $untilDate = null,
+    ): array
     {
         $created = 0;
         $updated = 0;
@@ -107,13 +115,22 @@ class LmbPawnSyncService
         }
 
         $sql = "SELECT {$selectCols} FROM public.{$docTable} d WHERE NOT d._marked";
+        $bindings = [];
+        if ($sinceDate !== null && $sinceDate !== '') {
+            $sql .= ' AND d."'.$dateCol.'"::date >= ?::date';
+            $bindings[] = $sinceDate;
+        }
+        if ($untilDate !== null && $untilDate !== '') {
+            $sql .= ' AND d."'.$dateCol.'"::date <= ?::date';
+            $bindings[] = $untilDate;
+        }
         if ($onlyActing && $expiryCol !== '') {
             // Действующие: дата окончания >= сегодня или пустая (в 1С часто 0001-01-01)
             $sql .= ' AND (d."'.$expiryCol.'" >= CURRENT_DATE OR d."'.$expiryCol.'" < \'1900-01-01\'::timestamp)';
         }
 
         try {
-            $docRows = DB::connection($this->connection)->select($sql);
+            $docRows = DB::connection($this->connection)->select($sql, $bindings);
         } catch (\Throwable $e) {
             $errors[] = 'Ошибка чтения документа залога из 1С: '.$e->getMessage();
 

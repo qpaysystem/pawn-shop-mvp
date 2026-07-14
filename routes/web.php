@@ -11,6 +11,9 @@ use App\Http\Controllers\CashController;
 use App\Http\Controllers\ChartOfAccountsController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommissionContractController;
+use App\Http\Controllers\ContactCenterAvitoMatchController;
+use App\Http\Controllers\ContactCenterLeadController;
+use App\Http\Controllers\ContactCenterVitrineController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentLedgerEntryController;
@@ -23,13 +26,19 @@ use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ItemStatusController;
 use App\Http\Controllers\KnowledgeBaseController;
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\Management\AcuerdoReportController;
+use App\Http\Controllers\Management\LombardReportController;
+use App\Http\Controllers\Management\MeetingReportController;
+use App\Http\Controllers\Management\TaskController;
 use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\PawnContractController;
 use App\Http\Controllers\PayrollAccrualController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseContractController;
+use App\Http\Controllers\SettingController;
 use App\Http\Controllers\StorageLocationController;
 use App\Http\Controllers\StoreController;
+use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -54,6 +63,8 @@ Route::get('/buy', fn () => app(LandingController::class)->page('buy'))->name('l
 Route::get('/contacts', fn () => app(LandingController::class)->page('contacts'))->name('landing.contacts');
 Route::get('/about', fn () => app(LandingController::class)->page('about'))->name('landing.about');
 Route::get('/catalog', fn () => app(LandingController::class)->page('catalog'))->name('landing.catalog');
+
+Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle'])->name('telegram.webhook');
 
 // Категории и подразделы
 Route::get('/gold', fn () => app(LandingController::class)->page('gold'))->name('landing.gold');
@@ -93,9 +104,38 @@ Route::post('logout', [LoginController::class, 'logout'])->name('logout')->middl
 Route::middleware('auth')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+    Route::get('section/contact-center', [AdminSectionController::class, 'contactCenter'])
+        ->name('section.contact-center')
+        ->middleware('role:contact-center,super-admin,manager');
+
     Route::get('section/clients', [AdminSectionController::class, 'clients'])->name('section.clients');
     Route::get('section/marketing', [AdminSectionController::class, 'marketing'])->name('section.marketing');
     Route::get('section/finance', [AdminSectionController::class, 'finance'])->name('section.finance');
+    Route::get('section/management', [AdminSectionController::class, 'management'])->name('section.management');
+
+    Route::resource('management/personnel', EmployeeController::class)
+        ->names('management.personnel')
+        ->parameters(['personnel' => 'employee']);
+
+    Route::get('management/tasks/board', [TaskController::class, 'board'])->name('management.tasks.board');
+    Route::patch('management/tasks/{task}/status', [TaskController::class, 'updateStatus'])->name('management.tasks.status');
+    Route::resource('management/tasks', TaskController::class)->names('management.tasks');
+
+    Route::prefix('management/reports')->name('management.reports.')->group(function () {
+        Route::get('/', [AcuerdoReportController::class, 'index'])->name('index');
+        Route::get('/current-asset', [AcuerdoReportController::class, 'currentAsset'])->name('current-asset');
+        Route::get('/current-finances', [AcuerdoReportController::class, 'currentFinances'])->name('current-finances');
+        Route::prefix('lombard')->name('lombard.')->group(function () {
+            Route::get('/pawns', [LombardReportController::class, 'pawnsRedemptions'])->name('pawns');
+            Route::get('/gross-profit', [LombardReportController::class, 'grossProfit'])->name('gross-profit');
+            Route::get('/pawn-profit', [LombardReportController::class, 'pawnProfit'])->name('pawn-profit');
+            Route::get('/sales-profit', [LombardReportController::class, 'salesProfit'])->name('sales-profit');
+            Route::get('/inventory', [LombardReportController::class, 'inventorySummary'])->name('inventory');
+        });
+        Route::get('/meetings', [MeetingReportController::class, 'index'])->name('meetings.index');
+        Route::post('/meetings/sync-latest', [MeetingReportController::class, 'syncLatest'])->name('meetings.sync-latest');
+        Route::get('/meetings/{meetingReport}', [MeetingReportController::class, 'show'])->name('meetings.show');
+    });
     Route::get('section/settings', [AdminSectionController::class, 'settings'])->name('section.settings');
     Route::get('appraiser', function () {
         return view('appraiser.home');
@@ -122,19 +162,50 @@ Route::middleware('auth')->group(function () {
     Route::resource('items', ItemController::class)->only(['index', 'show', 'edit', 'update', 'destroy']);
 
     // Колл-центр
-    Route::get('call-center', [CallCenterController::class, 'index'])->name('call-center.index');
-    Route::get('call-center/analytics', [CallCenterController::class, 'analytics'])->name('call-center.analytics');
-    Route::get('call-center/create', [CallCenterController::class, 'create'])->name('call-center.create');
-    Route::post('call-center', [CallCenterController::class, 'store'])->name('call-center.store');
-    Route::get('call-center/{callCenterContact}', [CallCenterController::class, 'show'])->name('call-center.show');
-    Route::get('call-center/{callCenterContact}/edit', [CallCenterController::class, 'edit'])->name('call-center.edit');
-    Route::put('call-center/{callCenterContact}', [CallCenterController::class, 'update'])->name('call-center.update');
-    Route::post('call-center/clear-mts-contacts', [CallCenterController::class, 'clearMtsContacts'])->name('call-center.clear-mts-contacts');
-    Route::post('call-center/sync-mts-calls', [CallCenterController::class, 'syncMtsCalls'])->name('call-center.sync-mts-calls');
-    Route::post('call-center/sync-mts-recordings', [CallCenterController::class, 'syncMtsRecordings'])->name('call-center.sync-mts-recordings');
-    Route::get('call-center/{callCenterContact}/recording', [CallCenterController::class, 'recording'])->name('call-center.recording');
-    Route::get('call-center/{callCenterContact}/recording-mts', [CallCenterController::class, 'recordingFromMts'])->name('call-center.recording-mts');
-    Route::post('call-center/{callCenterContact}/transcribe', [CallCenterController::class, 'transcribeRecording'])->name('call-center.transcribe');
+    Route::middleware('role:contact-center,super-admin,manager')->group(function () {
+        Route::get('call-center', [CallCenterController::class, 'index'])->name('call-center.index');
+        Route::get('call-center/analytics', [CallCenterController::class, 'analytics'])->name('call-center.analytics');
+        Route::post('call-center/clear-mts-contacts', [CallCenterController::class, 'clearMtsContacts'])->name('call-center.clear-mts-contacts');
+        Route::post('call-center/sync-mts-calls', [CallCenterController::class, 'syncMtsCalls'])->name('call-center.sync-mts-calls');
+        Route::post('call-center/sync-mts-recordings', [CallCenterController::class, 'syncMtsRecordings'])->name('call-center.sync-mts-recordings');
+        Route::get('call-center/avito/chats', [CallCenterController::class, 'avitoChats'])->name('call-center.avito.chats');
+        Route::get('call-center/avito/chats/{chatId}/messages', [CallCenterController::class, 'avitoMessages'])->where('chatId', '.+')->name('call-center.avito.messages');
+        Route::post('call-center/avito/chats/{chatId}/messages', [CallCenterController::class, 'sendAvitoMessage'])->where('chatId', '.+')->name('call-center.avito.send');
+        Route::get('call-center/telegram/search', [CallCenterController::class, 'telegramSearch'])->name('call-center.telegram.search');
+        Route::post('call-center/telegram/open', [CallCenterController::class, 'telegramOpen'])->name('call-center.telegram.open');
+        Route::get('call-center/telegram/chats', [CallCenterController::class, 'telegramChats'])->name('call-center.telegram.chats');
+        Route::get('call-center/telegram/chats/{chatId}/messages', [CallCenterController::class, 'telegramMessages'])->where('chatId', '.+')->name('call-center.telegram.messages');
+        Route::post('call-center/telegram/chats/{chatId}/messages', [CallCenterController::class, 'sendTelegramMessage'])->where('chatId', '.+')->name('call-center.telegram.send');
+        Route::get('call-center/create', [CallCenterController::class, 'create'])->name('call-center.create');
+        Route::post('call-center', [CallCenterController::class, 'store'])->name('call-center.store');
+        Route::get('call-center/{callCenterContact}', [CallCenterController::class, 'show'])->name('call-center.show');
+        Route::get('call-center/{callCenterContact}/edit', [CallCenterController::class, 'edit'])->name('call-center.edit');
+        Route::put('call-center/{callCenterContact}', [CallCenterController::class, 'update'])->name('call-center.update');
+        Route::get('call-center/{callCenterContact}/recording', [CallCenterController::class, 'recording'])->name('call-center.recording');
+        Route::post('call-center/{callCenterContact}/transcribe', [CallCenterController::class, 'transcribeRecording'])->name('call-center.transcribe');
+        Route::get('call-center/{callCenterContact}/recording-from-mts', [CallCenterController::class, 'recordingFromMts'])->name('call-center.recording-from-mts');
+        Route::get('call-center/{callCenterContact}/recording-mts', [CallCenterController::class, 'recordingFromMts'])->name('call-center.recording-mts');
+
+        Route::get('contact-center/leads', [ContactCenterLeadController::class, 'index'])->name('contact-center.leads.index');
+        Route::get('contact-center/leads/create', [ContactCenterLeadController::class, 'create'])->name('contact-center.leads.create');
+        Route::post('contact-center/leads', [ContactCenterLeadController::class, 'store'])->name('contact-center.leads.store');
+        Route::get('contact-center/leads/items/search', [ContactCenterLeadController::class, 'searchItems'])->name('contact-center.leads.items.search');
+        Route::get('contact-center/leads/{lead}', [ContactCenterLeadController::class, 'show'])->name('contact-center.leads.show');
+        Route::put('contact-center/leads/{lead}', [ContactCenterLeadController::class, 'update'])->name('contact-center.leads.update');
+        Route::post('contact-center/leads/{lead}/note', [ContactCenterLeadController::class, 'addNote'])->name('contact-center.leads.note');
+        Route::post('contact-center/leads/{lead}/assign', [ContactCenterLeadController::class, 'assignStore'])->name('contact-center.leads.assign');
+        Route::post('contact-center/leads/{lead}/reserve', [ContactCenterLeadController::class, 'reserve'])->name('contact-center.leads.reserve');
+        Route::post('contact-center/leads/{lead}/cancel-reservation', [ContactCenterLeadController::class, 'cancelReservation'])->name('contact-center.leads.cancel-reservation');
+        Route::get('contact-center/contacts/search', [ContactCenterLeadController::class, 'searchContacts'])->name('contact-center.contacts.search');
+        Route::get('contact-center/contacts/recent', [ContactCenterLeadController::class, 'recentContacts'])->name('contact-center.contacts.recent');
+
+        Route::get('contact-center/vitrine-priority', [ContactCenterVitrineController::class, 'index'])->name('contact-center.vitrine-priority.index');
+        Route::post('contact-center/vitrine-priority/sync-avito', [ContactCenterVitrineController::class, 'syncAvitoInbox'])->name('contact-center.vitrine-priority.sync-avito');
+        Route::post('contact-center/vitrine-priority/{item}/discount', [ContactCenterVitrineController::class, 'applyDiscount'])->name('contact-center.vitrine-priority.discount');
+
+        Route::get('contact-center/avito-match', [ContactCenterAvitoMatchController::class, 'index'])->name('contact-center.avito-match.index');
+        Route::post('contact-center/avito-match', [ContactCenterAvitoMatchController::class, 'upload'])->name('contact-center.avito-match.upload');
+    });
 
     // Маркетинг: источники трафика, воронка, эффективность, 2ГИС
     Route::get('marketing', [MarketingController::class, 'index'])->name('marketing.index');
@@ -177,8 +248,9 @@ Route::middleware('auth')->group(function () {
     Route::get('expenses/{expense}', [ExpenseController::class, 'show'])->name('expenses.show');
     Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
 
-    // ФОТ: сотрудники + документы начисления
-    Route::resource('employees', EmployeeController::class);
+    // ФОТ: журнал сотрудников (управление) + документы начисления
+    Route::redirect('employees', '/management/personnel')->name('employees.index');
+    Route::redirect('employees/create', '/management/personnel/create')->name('employees.create');
     Route::get('payroll-accruals', [PayrollAccrualController::class, 'index'])->name('payroll-accruals.index');
     Route::get('payroll-accruals/create', [PayrollAccrualController::class, 'create'])->name('payroll-accruals.create');
     Route::post('payroll-accruals', [PayrollAccrualController::class, 'store'])->name('payroll-accruals.store');
@@ -234,6 +306,11 @@ Route::middleware('auth')->group(function () {
     // Магазины и пользователи — только super-admin
     Route::resource('stores', StoreController::class)->middleware('role:super-admin');
     Route::resource('users', UserController::class)->except(['show'])->middleware('role:super-admin');
+
+    Route::middleware('role:super-admin')->group(function () {
+        Route::get('settings/system', [SettingController::class, 'index'])->name('settings.system.index');
+        Route::post('settings/system', [SettingController::class, 'store'])->name('settings.system.store');
+    });
 });
 
 // База знаний — публичный просмотр без авторизации (регистрируем после admin, чтобы /knowledge-base/admin/* не перехватывалось как категория)

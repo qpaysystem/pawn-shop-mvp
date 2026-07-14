@@ -93,6 +93,45 @@ class MtsVpbxService
     }
 
     /**
+     * @param  array<string, scalar|null>  $params
+     */
+    private function httpGetWithRetry(
+        string $url,
+        array $params,
+        int $timeout,
+        bool $jsonAccept = true,
+        int $retries = 3
+    ): ?\Illuminate\Http\Client\Response {
+        $last = null;
+        for ($attempt = 1; $attempt <= $retries; $attempt++) {
+            try {
+                return Http::timeout($timeout)
+                    ->connectTimeout(30)
+                    ->withOptions($this->httpOptions())
+                    ->withHeaders($this->authHeaders($jsonAccept))
+                    ->get($url, $params);
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $last = $e;
+                Log::debug('MtsVpbxService: HTTP retry', [
+                    'url' => $url,
+                    'attempt' => $attempt,
+                    'error' => $e->getMessage(),
+                ]);
+                if ($attempt < $retries) {
+                    sleep($attempt * 2);
+                }
+            }
+        }
+
+        Log::warning('MtsVpbxService: HTTP failed after retries', [
+            'url' => $url,
+            'error' => $last?->getMessage(),
+        ]);
+
+        return null;
+    }
+
+    /**
      * AC20: GET /trunks/all — нужны только JWT и параметр Domain (из ЛК / Swagger).
      *
      * @return list<array<string, mixed>>|null
@@ -351,32 +390,10 @@ class MtsVpbxService
         }
         $contactDate = $dt->format('Y-m-d H:i:s');
 
-        $an = $this->arrayGet($row, 'an');
-        $dn = $this->arrayGet($row, 'dn');
-        $anDigits = $an !== null && $an !== '' ? preg_replace('/\D/', '', (string) $an) : '';
-        $dnDigits = $dn !== null && $dn !== '' ? preg_replace('/\D/', '', (string) $dn) : '';
-
-        $rel = $this->arrayGet($row, 'rel');
-        $isInternal = (int) $rel === 1;
-
-        // Внешний звонок: клиент с длинным номером на коротком/служебном — входящий (звонят нам) или исходящий (мы звоним клиенту).
-        $direction = 'incoming';
-        $rawPhone = $an;
-        if (! $isInternal) {
-            if (strlen($anDigits) >= 10 && strlen($dnDigits) < 10) {
-                $direction = 'incoming';
-                $rawPhone = $an;
-            } elseif (strlen($dnDigits) >= 10 && strlen($anDigits) < 10) {
-                $direction = 'outgoing';
-                $rawPhone = $dn;
-            } else {
-                $rawPhone = $an ?: $dn;
-            }
-        } else {
-            $rawPhone = $an ?: $dn;
-        }
-
-        $contactPhone = $this->normalizePhoneDigits($rawPhone);
+        $parties = $this->resolveAc20CallParties($row);
+        $direction = $parties['direction'];
+        $contactPhone = $parties['contact_phone'];
+        $linePhone = $parties['line_phone'];
 
         $duration = $this->arrayGet($row, 'duration');
         $durationSec = is_numeric($duration) ? (int) $duration : null;
@@ -395,12 +412,103 @@ class MtsVpbxService
             'external_id' => 'mts_ac20_'.$callIdStr,
             'contact_date' => $contactDate,
             'contact_phone' => $contactPhone,
+            'line_phone' => $linePhone,
             'direction' => $direction,
             'notes' => $notes,
             'call_status' => $callStatus,
             'call_duration_sec' => $durationSec,
             'ext_tracking_id' => $hasRecording ? $callIdStr : null,
         ];
+    }
+
+    /**
+     * AC20: an — A-номер (звонящий), dn — D-номер (вызываемый).
+     * Входящий: абонент = an, наш номер = dn. Исходящий: абонент = dn, наш номер = an.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array{direction: string, contact_phone: ?string, line_phone: ?string}
+     */
+    private function resolveAc20CallParties(array $row): array
+    {
+        $an = trim((string) ($this->arrayGet($row, 'an') ?? ''));
+        $dn = trim((string) ($this->arrayGet($row, 'dn') ?? ''));
+        $anDigits = $an !== '' ? preg_replace('/\D/', '', $an) : '';
+        $dnDigits = $dn !== '' ? preg_replace('/\D/', '', $dn) : '';
+        $rel = (int) ($this->arrayGet($row, 'rel') ?? 0);
+
+        $direction = $this->parseCallDirection(
+            $this->arrayGet($row, 'direction') ?? $this->arrayGet($row, 'callDirection') ?? $this->arrayGet($row, 'type')
+        );
+
+        if ($direction === null && $rel !== 1) {
+            if (strlen($anDigits) >= 10 && strlen($dnDigits) < 10) {
+                $direction = 'incoming';
+            } elseif (strlen($dnDigits) >= 10 && strlen($anDigits) < 10) {
+                $direction = 'outgoing';
+            }
+        }
+        if ($direction === null) {
+            $direction = 'incoming';
+        }
+
+        if ($direction === 'incoming') {
+            $contactRaw = $an !== '' ? $an : $dn;
+            $lineRaw = $dn !== '' ? $dn : $an;
+        } else {
+            $contactRaw = $dn !== '' ? $dn : $an;
+            $lineRaw = $an !== '' ? $an : $dn;
+        }
+
+        return [
+            'direction' => $direction,
+            'contact_phone' => $this->normalizePhoneDigits($contactRaw),
+            'line_phone' => $this->normalizeLinePhone($lineRaw),
+        ];
+    }
+
+    private function parseCallDirection(mixed $raw): ?string
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        $d = strtoupper((string) $raw);
+        if (in_array($d, ['OUT', 'OUTGOING', 'ORIGINATING', 'ORIGINATE'], true)) {
+            return 'outgoing';
+        }
+        if (in_array($d, ['IN', 'INCOMING', 'TERMINATING', 'TERMINATE'], true)) {
+            return 'incoming';
+        }
+
+        return null;
+    }
+
+    /** Номер нашей линии (DID / АОН): нормализация + fallback на транк / LOMBARD_PHONE. */
+    private function normalizeLinePhone(mixed $raw): ?string
+    {
+        if ($raw === null || trim((string) $raw) === '') {
+            return $this->defaultCompanyLinePhone();
+        }
+
+        $normalized = $this->normalizePhoneDigits($raw);
+        if ($normalized !== null) {
+            return $normalized;
+        }
+
+        $digits = preg_replace('/\D/', '', (string) $raw);
+        if (strlen($digits) >= 10) {
+            return $this->normalizePhoneDigits($digits);
+        }
+
+        return $this->defaultCompanyLinePhone();
+    }
+
+    private function defaultCompanyLinePhone(): ?string
+    {
+        if (strlen($this->ac20TrunkId) === 10) {
+            return $this->normalizePhoneDigits($this->ac20TrunkId);
+        }
+
+        return $this->normalizePhoneDigits(config('services.lombard.phone', ''));
     }
 
     private function normalizePhoneDigits(mixed $raw): ?string
@@ -464,16 +572,10 @@ class MtsVpbxService
         $dir = $row['direction'] ?? $row['type'] ?? $row['call_type'] ?? $row['call_direction'] ?? 'TERMINATING';
         $direction = (strtoupper((string) $dir) === 'ORIGINATING') ? 'outgoing' : 'incoming';
 
-        $contactPhone = $direction === 'incoming' ? ($caller ?? $called) : ($called ?? $caller);
-        if ($contactPhone !== null) {
-            $contactPhone = (string) $contactPhone;
-            $contactPhone = preg_replace('/\D/', '', $contactPhone);
-            if (strlen($contactPhone) >= 10) {
-                $contactPhone = '+'.(str_starts_with($contactPhone, '8') ? '7'.substr($contactPhone, 1) : (str_starts_with($contactPhone, '7') ? $contactPhone : '7'.$contactPhone));
-            } else {
-                $contactPhone = null;
-            }
-        }
+        $contactRaw = $direction === 'incoming' ? ($caller ?? $called) : ($called ?? $caller);
+        $lineRaw = $direction === 'incoming' ? ($called ?? $caller) : ($caller ?? $called);
+        $contactPhone = $this->normalizePhoneDigits($contactRaw);
+        $linePhone = $this->normalizeLinePhone($lineRaw);
 
         $duration = $row['duration'] ?? $row['talk_time'] ?? $row['billsec'] ?? $row['answer_sec'] ?? null;
         $status = $this->arrayGet($row, 'status') ?? '';
@@ -496,6 +598,7 @@ class MtsVpbxService
             'external_id' => 'mts_'.$id,
             'contact_date' => $contactDate,
             'contact_phone' => $contactPhone,
+            'line_phone' => $linePhone,
             'direction' => $direction,
             'notes' => $notes,
             'call_status' => $callStatus,
@@ -533,13 +636,12 @@ class MtsVpbxService
         }
 
         $url = $this->baseUrl.'/api/callRecording/mp3/'.rawurlencode($extTrackingId);
-        $response = Http::timeout(60)
-            ->withOptions($this->httpOptions())
-            ->withHeaders($this->authHeaders(false))
-            ->get($url);
-
-        if (! $response->successful()) {
-            Log::debug('MtsVpbxService: запись не получена', ['ext_tracking_id' => $extTrackingId, 'status' => $response->status()]);
+        $response = $this->httpGetWithRetry($url, [], 90, false);
+        if ($response === null || ! $response->successful()) {
+            Log::debug('MtsVpbxService: запись не получена', [
+                'ext_tracking_id' => $extTrackingId,
+                'status' => $response?->status(),
+            ]);
 
             return null;
         }
@@ -572,13 +674,12 @@ class MtsVpbxService
         }
 
         $url = $this->baseUrl.'/api/callRecording/mp3/'.rawurlencode($extTrackingId);
-        $response = Http::timeout(60)
-            ->withOptions($this->httpOptions())
-            ->withHeaders($this->authHeaders(false))
-            ->get($url);
-
-        if (! $response->successful()) {
-            Log::debug('MtsVpbxService: запись не получена', ['ext_tracking_id' => $extTrackingId, 'status' => $response->status()]);
+        $response = $this->httpGetWithRetry($url, [], 90, false);
+        if ($response === null || ! $response->successful()) {
+            Log::debug('MtsVpbxService: запись не получена', [
+                'ext_tracking_id' => $extTrackingId,
+                'status' => $response?->status(),
+            ]);
 
             return null;
         }
@@ -606,10 +707,10 @@ class MtsVpbxService
             'TrunkId' => $this->ac20TrunkId,
             'CallId' => (int) $callIdStr,
         ];
-        $response = Http::timeout(60)
-            ->withOptions($this->httpOptions())
-            ->withHeaders($this->authHeaders())
-            ->get($url, $params);
+        $response = $this->httpGetWithRetry($url, $params, 90);
+        if ($response === null) {
+            return null;
+        }
 
         if ($response->status() === 204) {
             return null;
@@ -681,13 +782,12 @@ class MtsVpbxService
             'CallId' => (int) $callIdStr,
             'Type' => 'mp3',
         ];
-        $response = Http::timeout(120)
-            ->withOptions($this->httpOptions())
-            ->withHeaders($this->authHeaders(false))
-            ->get($url, $params);
-
-        if (! $response->successful()) {
-            Log::debug('MtsVpbxService AC20: запись не получена', ['call_id' => $callIdStr, 'status' => $response->status()]);
+        $response = $this->httpGetWithRetry($url, $params, 180, false);
+        if ($response === null || ! $response->successful()) {
+            Log::debug('MtsVpbxService AC20: запись не получена', [
+                'call_id' => $callIdStr,
+                'status' => $response?->status(),
+            ]);
 
             return null;
         }

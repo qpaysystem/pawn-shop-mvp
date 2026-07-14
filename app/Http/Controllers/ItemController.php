@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Item;
 use App\Models\ItemStatus;
 use App\Models\ItemStatusHistory;
+use App\Models\LmbProductEvent;
 use App\Models\StorageLocation;
+use App\Services\ContactCenter\ItemReservationService;
+use App\Services\Items\ItemAvitoLifeService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -39,15 +43,117 @@ class ItemController extends Controller
         return view('items.index', compact('items', 'statuses'));
     }
 
-    public function show(Item $item)
+    public function show(Item $item, ItemReservationService $reservations, ItemAvitoLifeService $avitoLife)
     {
         if (! in_array($item->store_id, Auth::user()->allowedStoreIds(), true)) {
             abort(403);
         }
-        $item->load(['store', 'status', 'storageLocation', 'category', 'brand', 'statusHistory.newStatus', 'statusHistory.oldStatus', 'statusHistory.changedByUser']);
-        $item->load(['pawnContract.client', 'pawnContract.appraiser', 'commissionContract.client', 'commissionContract.appraiser']);
+        $item->load([
+            'store', 'status', 'storageLocation', 'category', 'brand',
+            'statusHistory.newStatus', 'statusHistory.oldStatus', 'statusHistory.changedByUser',
+            'pawnContract.client', 'pawnContract.appraiser',
+            'commissionContract.client', 'commissionContract.appraiser',
+            'purchaseContract.client',
+            'reservations.lead', 'reservations.client', 'reservations.createdByUser',
+            'contactCenterLeads.createdByUser',
+        ]);
 
-        return view('items.show', compact('item'));
+        $activeReservation = $reservations->activeForItem($item);
+        $avitoSummary = $avitoLife->summaryForItem($item);
+        $lifeMap = $this->buildLifeMap($item, $avitoLife);
+
+        return view('items.show', compact('item', 'activeReservation', 'lifeMap', 'avitoSummary'));
+    }
+
+    /** @return array<int, array{at: \Carbon\Carbon, kind: string, title: string, meta: ?string, url: ?string}> */
+    private function buildLifeMap(Item $item, ItemAvitoLifeService $avitoLife): array
+    {
+        $events = [];
+
+        foreach ($item->statusHistory as $h) {
+            $events[] = [
+                'at' => Carbon::parse($h->created_at),
+                'kind' => 'status',
+                'title' => 'Статус: '.($h->oldStatus?->name ?? '—').' → '.($h->newStatus?->name ?? '—'),
+                'meta' => $h->changedByUser?->name,
+            ];
+        }
+
+        foreach ($item->reservations as $r) {
+            $events[] = [
+                'at' => Carbon::parse($r->created_at),
+                'kind' => 'reservation',
+                'title' => 'Бронь ('.$r->statusLabel().') до '.$r->reserved_until->format('d.m.Y'),
+                'meta' => trim(($r->client?->full_name ?? $r->contact_name ?? '').' '.($r->lead?->lead_number ? '· '.$r->lead->lead_number : '')),
+            ];
+        }
+
+        foreach ($item->contactCenterLeads as $lead) {
+            $events[] = [
+                'at' => Carbon::parse($lead->created_at),
+                'kind' => 'lead',
+                'title' => 'Заявка '.$lead->lead_number.' — '.$lead->typeLabel(),
+                'meta' => $lead->statusLabel().($lead->createdByUser ? ' · '.$lead->createdByUser->name : ''),
+            ];
+        }
+
+        if ($item->pawnContract?->created_at) {
+            $events[] = [
+                'at' => Carbon::parse($item->pawnContract->created_at),
+                'kind' => 'contract',
+                'title' => 'Договор залога №'.$item->pawnContract->contract_number,
+                'meta' => $item->pawnContract->client?->full_name,
+            ];
+        }
+        if ($item->commissionContract?->created_at) {
+            $events[] = [
+                'at' => Carbon::parse($item->commissionContract->created_at),
+                'kind' => 'contract',
+                'title' => 'Договор комиссии №'.$item->commissionContract->contract_number,
+                'meta' => $item->commissionContract->client?->full_name,
+            ];
+        }
+        if ($item->purchaseContract?->created_at) {
+            $events[] = [
+                'at' => Carbon::parse($item->purchaseContract->created_at),
+                'kind' => 'contract',
+                'title' => 'Договор скупки №'.$item->purchaseContract->contract_number,
+                'meta' => $item->purchaseContract->client?->full_name,
+            ];
+        }
+
+        foreach ($avitoLife->lifeMapEventsForItem($item) as $event) {
+            $events[] = $event;
+        }
+
+        foreach (LmbProductEvent::query()->where('item_id', $item->id)->orderByDesc('event_at')->get() as $pe) {
+            $from = $pe->fromStore?->name;
+            $to = $pe->toStore?->name;
+            $title = $pe->typeLabel();
+            if (in_array($pe->event_type, [LmbProductEvent::TYPE_MOVE, LmbProductEvent::TYPE_MOVE_PENDING], true)) {
+                $title .= ': '.($from ?? '—').' → '.($to ?? '—');
+            } elseif ($pe->event_type === LmbProductEvent::TYPE_STATUS || $pe->status_name) {
+                $title .= ($pe->status?->name || $pe->status_name)
+                    ? ': '.($pe->status?->name ?? $pe->status_name)
+                    : '';
+            }
+            $events[] = [
+                'at' => $pe->event_at ? Carbon::parse($pe->event_at) : Carbon::parse($pe->created_at),
+                'kind' => in_array($pe->event_type, [LmbProductEvent::TYPE_MOVE, LmbProductEvent::TYPE_MOVE_PENDING], true)
+                    ? 'move'
+                    : 'status',
+                'title' => $title,
+                'meta' => trim(implode(' · ', array_filter([
+                    $pe->event_number ? '№'.$pe->event_number : null,
+                    $pe->responsible,
+                    $pe->applied ? null : 'без применения к карточке',
+                ]))),
+            ];
+        }
+
+        usort($events, fn ($a, $b) => $b['at']->timestamp <=> $a['at']->timestamp);
+
+        return $events;
     }
 
     public function edit(Item $item)

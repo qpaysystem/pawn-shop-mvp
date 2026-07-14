@@ -80,6 +80,8 @@ php artisan lmb:sync-passports-from-1c
 
 - Репозиторий: **https://github.com/qpaysystem/pawn-shop-mvp** (`main`).
 - Полная инструкция (Timeweb, SSH, БД): **[DEPLOY.md](DEPLOY.md)**.
+- Домашний сервер (LAN, Docker): **[DEPLOY_HOME_LAN.md](DEPLOY_HOME_LAN.md)**.
+- Домашний сервер + **Tailscale** + мобильное приложение: **[DEPLOY_TAILSCALE.md](DEPLOY_TAILSCALE.md)**.
 - Обновление на сервере: в каталоге проекта `./deploy.sh` (миграции, кэш, composer).
 - С вашего Mac: `git push origin main`, затем на сервере `git pull` и `./deploy.sh`, либо шаблон **`scripts/deploy-remote.example.sh`** → `scripts/deploy-remote.sh` с переменной `DEPLOY_SSH`.
 - SFTP: шаблон **`.vscode/sftp.json.example`** → `.vscode/sftp.json` (не коммитить).

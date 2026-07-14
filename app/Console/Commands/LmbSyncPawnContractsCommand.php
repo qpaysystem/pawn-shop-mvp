@@ -10,6 +10,8 @@ class LmbSyncPawnContractsCommand extends Command
     protected $signature = 'lmb:sync-pawn-contracts
                             {--dry-run : Не записывать в БД, только проверить подключение и конфиг}
                             {--all : Синхронизировать все залоги (не только действующие)}
+                            {--since= : Дата документа в 1С с (Y-m-d), включительно}
+                            {--until= : Дата документа по (Y-m-d), включительно; по умолчанию = --since}
                             {--with-register-balance : Только договоры с положительным остатком в регистре накопления 1С}
                             {--without-register-balance-filter : Не применять фильтр по остаткам (даже если включён в .env)}
                             {--force : Запуск без подтверждения}';
@@ -35,16 +37,27 @@ class LmbSyncPawnContractsCommand extends Command
         $this->info("Таблица документа залога: public.{$table}");
         $onlyActing = ! $this->option('all');
         $filterByBalanceRegister = $this->resolveFilterByBalanceRegister();
+        [$sinceDate, $untilDate] = $this->resolveDateRange();
 
         if ($this->option('dry-run')) {
             $this->info('Режим dry-run: проверка конфига и подключения.');
             try {
                 \Illuminate\Support\Facades\DB::connection('lmb_1c_pgsql')->getPdo();
-                $count = \Illuminate\Support\Facades\DB::connection('lmb_1c_pgsql')
+                $q = \Illuminate\Support\Facades\DB::connection('lmb_1c_pgsql')
                     ->table($table)
-                    ->whereRaw('NOT _marked')
-                    ->count();
+                    ->whereRaw('NOT _marked');
+                $dateCol = preg_replace('/[^a-z0-9_]/i', '', (string) config('services.lmb_1c_pawn_sync.date_column', '_date_time'));
+                if ($sinceDate !== null) {
+                    $q->whereDate($dateCol, '>=', $sinceDate);
+                }
+                if ($untilDate !== null) {
+                    $q->whereDate($dateCol, '<=', $untilDate);
+                }
+                $count = $q->count();
                 $this->info("Записей в документе (без пометки): {$count}");
+                if ($sinceDate !== null || $untilDate !== null) {
+                    $this->info("Фильтр по дате документа: {$sinceDate} — {$untilDate}");
+                }
                 if ($onlyActing && config('services.lmb_1c_pawn_sync.expiry_column')) {
                     $this->info('Будут учитываться только залоги с датой окончания >= сегодня.');
                 }
@@ -73,7 +86,7 @@ class LmbSyncPawnContractsCommand extends Command
         $this->info($modeLine.'...');
         $result = $sync->sync($onlyActing, function (int $processed, int $total) {
             $this->output->write("\r  Обработано: {$processed} / {$total}");
-        }, $filterByBalanceRegister);
+        }, $filterByBalanceRegister, $sinceDate, $untilDate);
         $this->newLine();
 
         $this->table(
@@ -126,6 +139,30 @@ class LmbSyncPawnContractsCommand extends Command
         $this->info('Готово. Договоры залога из 1С отображаются в разделе «Документы» / «Договоры залога».');
 
         return self::SUCCESS;
+    }
+
+    /** @return array{0: ?string, 1: ?string} since, until (Y-m-d) */
+    private function resolveDateRange(): array
+    {
+        $since = trim((string) $this->option('since'));
+        $until = trim((string) $this->option('until'));
+        if ($since === '' && $until === '') {
+            return [null, null];
+        }
+        if ($since === '') {
+            $this->fail('Укажите --since=YYYY-MM-DD или оба --since и --until.');
+        }
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $since)) {
+            $this->fail('Неверный формат --since, ожидается Y-m-d.');
+        }
+        if ($until === '') {
+            $until = $since;
+        }
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $until)) {
+            $this->fail('Неверный формат --until, ожидается Y-m-d.');
+        }
+
+        return [$since, $until];
     }
 
     private function resolveFilterByBalanceRegister(): bool

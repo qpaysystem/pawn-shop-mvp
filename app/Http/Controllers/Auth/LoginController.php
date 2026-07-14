@@ -30,9 +30,11 @@ class LoginController extends Controller
         $request->session()->regenerate();
 
         $user = Auth::user();
-        $defaultUrl = ($user && $user->role === 'appraiser')
+        $defaultUrl = ($user && $user->role === 'contact-center')
+            ? route('section.contact-center')
+            : (($user && $user->role === 'appraiser')
             ? route('appraiser.home')
-            : route('dashboard');
+            : route('dashboard'));
 
         return redirect()->intended($defaultUrl);
     }

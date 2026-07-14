@@ -26,7 +26,7 @@ class Client extends Model
     protected $fillable = [
         'client_type', 'full_name', 'last_name', 'first_name', 'patronymic',
         'legal_name', 'inn', 'kpp', 'legal_address',
-        'phone', 'phone_key', 'email', 'passport_data', 'notes', 'blacklist_flag',
+        'phone', 'phone_key', 'email', 'telegram_id', 'telegram_username', 'passport_data', 'notes', 'blacklist_flag',
         'lmb_data', 'user_uid', 'lmb_full_name', 'lmb_created_at',
         'traffic_source_id', 'funnel_stage',
         'lmb_identity_document_type', 'lmb_passport_issued_by', 'lmb_passport_issued_at', 'lmb_registration_address',
@@ -62,6 +62,52 @@ class Client extends Model
         $digits = preg_replace('/\D/', '', $phone);
 
         return strlen($digits) >= 7 ? substr($digits, -7) : null;
+    }
+
+    /** Минимальная длина запроса для /clients/search: от 3 цифр для телефона, иначе 2. */
+    public static function searchQueryMinLength(string $q): int
+    {
+        $trimmed = trim($q);
+        $digits = preg_replace('/\D/', '', $trimmed);
+        $compact = preg_replace('/\s+/u', '', $trimmed) ?? $trimmed;
+        if (strlen($digits) >= 3 && strlen($digits) >= strlen($compact)) {
+            return 3;
+        }
+
+        return 2;
+    }
+
+    /**
+     * Поиск по ФИО, телефону (с учётом формата и phone_key), паспорту.
+     */
+    public function scopeMatchingSearch($query, string $q)
+    {
+        $trimmed = trim($q);
+        if ($trimmed === '') {
+            return $query;
+        }
+
+        $digits = preg_replace('/\D/', '', $trimmed);
+
+        return $query->where(function ($inner) use ($trimmed, $digits) {
+            $inner->where('full_name', 'like', "%{$trimmed}%")
+                ->orWhere('last_name', 'like', "%{$trimmed}%")
+                ->orWhere('first_name', 'like', "%{$trimmed}%")
+                ->orWhere('patronymic', 'like', "%{$trimmed}%")
+                ->orWhere('phone', 'like', "%{$trimmed}%")
+                ->orWhere('passport_data', 'like', "%{$trimmed}%")
+                ->orWhere('email', 'like', "%{$trimmed}%")
+                ->orWhere('legal_name', 'like', "%{$trimmed}%")
+                ->orWhere('inn', 'like', "%{$trimmed}%");
+
+            if ($digits !== '' && strlen($digits) >= 3) {
+                $inner->orWhere('phone', 'like', "%{$digits}%");
+                $suffix = strlen($digits) > 10 ? substr($digits, -10) : $digits;
+                if (strlen($suffix) >= 4) {
+                    $inner->orWhere('phone_key', 'like', "%{$suffix}");
+                }
+            }
+        });
     }
 
     /** Laravel 10: касты только через $casts (метод casts() из Laravel 11 не подхватывается). */

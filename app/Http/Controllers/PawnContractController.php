@@ -2,14 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Account;
-use App\Models\CashDocument;
-use App\Models\CashOperationType;
 use App\Models\DocumentLedgerTemplate;
-use App\Models\ItemStatus;
 use App\Models\LedgerEntry;
 use App\Models\PawnContract;
-use App\Services\LedgerService;
+use App\Services\PawnContractRedemptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -69,90 +65,9 @@ class PawnContractController extends Controller
     }
 
     /** Оформить выкуп. */
-    public function redeem(Request $request, PawnContract $pawnContract)
+    public function redeem(Request $request, PawnContract $pawnContract, PawnContractRedemptionService $redemptionService)
     {
-        if (! in_array($pawnContract->store_id, Auth::user()->allowedStoreIds(), true)) {
-            abort(403);
-        }
-        if (! Auth::user()->canProcessSales()) {
-            abort(403, 'Нет прав на оформление выкупа.');
-        }
-        if ($pawnContract->is_redeemed) {
-            return redirect()->route('pawn-contracts.show', $pawnContract)->with('error', 'Договор уже выкуплен.');
-        }
-
-        $pawnContract->update([
-            'is_redeemed' => true,
-            'redeemed_at' => now(),
-            'redeemed_by' => Auth::id(),
-        ]);
-
-        $buybackAmount = (float) $pawnContract->buyback_amount;
-        $loanAmount = (float) $pawnContract->loan_amount;
-        $interestAmount = round($buybackAmount - $loanAmount, 2);
-        $entryDate = now();
-        $commentBase = 'Выкуп по договору залога №' . $pawnContract->contract_number;
-
-        $repayOpType = CashOperationType::findByName('Возврат займа');
-        $cashDoc = null;
-        if ($repayOpType && $buybackAmount > 0) {
-            $docNum = CashDocument::generateDocumentNumber($pawnContract->store_id, 'income');
-            $cashDoc = CashDocument::create([
-                'store_id' => $pawnContract->store_id,
-                'client_id' => $pawnContract->client_id,
-                'operation_type_id' => $repayOpType->id,
-                'document_number' => $docNum,
-                'document_date' => $entryDate->format('Y-m-d'),
-                'amount' => $buybackAmount,
-                'comment' => $commentBase,
-                'created_by' => Auth::id(),
-            ]);
-        }
-
-        $ledger = app(LedgerService::class);
-        $docType = $cashDoc ? 'cash_document' : 'pawn_contract';
-        $docId = $cashDoc ? $cashDoc->id : $pawnContract->id;
-
-        $clientId = $pawnContract->client_id;
-        if ($cashDoc && $loanAmount > 0) {
-            $ledger->post(
-                Account::CODE_CASH,
-                Account::CODE_LOANS,
-                $loanAmount,
-                $entryDate,
-                $pawnContract->store_id,
-                $docType,
-                $docId,
-                'Возврат основного долга по договору №' . $pawnContract->contract_number,
-                $clientId
-            );
-        }
-        if ($cashDoc && $interestAmount > 0) {
-            $ledger->post(
-                Account::CODE_CASH,
-                Account::CODE_OTHER_INCOME,
-                $interestAmount,
-                $entryDate,
-                $pawnContract->store_id,
-                $docType,
-                $docId,
-                'Проценты по договору залога №' . $pawnContract->contract_number,
-                $clientId
-            );
-        }
-        if ($loanAmount > 0) {
-            $ledger->post(
-                Account::CODE_SETTLEMENTS_OTHER,
-                Account::CODE_PLEDGE,
-                $loanAmount,
-                $entryDate,
-                $pawnContract->store_id,
-                'pawn_contract',
-                $pawnContract->id,
-                'Возврат товара из залога №' . $pawnContract->contract_number,
-                $clientId
-            );
-        }
+        $redemptionService->redeem(Auth::user(), $pawnContract);
 
         if ($request->get('from') === 'accept') {
             return redirect()->route('accept.create')->with('success', 'Выкуп оформлен. Кассовый документ создан, проводки отражены в ОСВ.');

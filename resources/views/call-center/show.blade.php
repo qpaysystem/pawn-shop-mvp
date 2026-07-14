@@ -6,6 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h4 mb-0">Обращение #{{ $callCenterContact->id }}</h1>
     <div>
+        <a href="{{ route('contact-center.leads.create', ['call_center_contact_id' => $callCenterContact->id]) }}" class="btn btn-primary">Создать заявку</a>
         <a href="{{ route('call-center.edit', $callCenterContact) }}" class="btn btn-outline-primary">Изменить</a>
         <a href="{{ route('call-center.index') }}" class="btn btn-secondary">К списку</a>
     </div>
@@ -28,7 +29,10 @@
                     <p><strong>Телефон:</strong> {{ $callCenterContact->client->phone ?? '—' }}</p>
                 @else
                     <p><strong>Контакт:</strong> {{ $callCenterContact->contact_name ?: '—' }}</p>
-                    <p><strong>Телефон:</strong> {{ $callCenterContact->contact_phone ?: '—' }}</p>
+                    <p><strong>Телефон абонента:</strong> {{ $callCenterContact->contact_phone ?: '—' }}</p>
+                @endif
+                @if($callCenterContact->channel === 'phone' && $callCenterContact->line_phone)
+                    <p><strong>{{ $callCenterContact->line_phone_caption }}:</strong> {{ $callCenterContact->line_phone }}</p>
                 @endif
             </div>
         </div>

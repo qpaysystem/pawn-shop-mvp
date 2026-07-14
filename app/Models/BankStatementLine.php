@@ -8,15 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** Строка выписки (движение по счёту). */
 class BankStatementLine extends Model
 {
-    protected $fillable = ['bank_statement_id', 'line_date', 'amount', 'description', 'counterparty', 'document_number'];
+    protected $fillable = ['bank_statement_id', 'line_date', 'amount', 'description', 'counterparty', 'document_number', 'external_id'];
 
-    protected function casts(): array
-    {
-        return [
-            'line_date' => 'date',
-            'amount' => 'decimal:2',
-        ];
-    }
+    /** @var array<string, string> */
+    protected $casts = [
+        'line_date' => 'date',
+        'amount' => 'decimal:2',
+    ];
 
     public function bankStatement(): BelongsTo
     {

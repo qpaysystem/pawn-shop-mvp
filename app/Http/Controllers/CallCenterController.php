@@ -4,7 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\CallCenterContact;
 use App\Models\Client;
-use App\Services\CallRecordingTranscriptionService;
+use App\Services\Avito\AvitoInboxService;
+use App\Services\CallCenterAvitoService;
+use App\Services\CallCenterMtsAutoEnrichmentService;
+use App\Services\CallCenterMtsRecordingService;
+use App\Services\CallCenterTelegramService;
 use App\Services\MtsVpbxService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,16 +21,26 @@ class CallCenterController extends Controller
 {
     public function index(Request $request)
     {
+        $tab = (string) $request->query('tab', 'calls');
+        if (! in_array($tab, ['calls', 'telegram', 'avito', 'max', 'whatsapp'], true)) {
+            $tab = 'calls';
+        }
+
         $storeIds = Auth::user()->allowedStoreIds();
         $query = CallCenterContact::with(['client', 'store', 'createdByUser', 'pawnContract', 'purchaseContract', 'commissionContract']);
         $query->where(function ($q) use ($storeIds) {
             $q->whereIn('store_id', $storeIds)->orWhereNull('store_id');
         });
 
-        if ($request->filled('channel')) {
-            $query->where('channel', $request->channel);
+        if ($tab === 'calls') {
+            $query->where('channel', 'phone');
+        } elseif ($tab === 'whatsapp') {
+            $query->where('channel', 'whatsapp');
+        } elseif ($tab === 'max') {
+            $query->whereRaw('1 = 0');
         }
-        if ($request->filled('call_status')) {
+
+        if ($tab === 'calls' && $request->filled('call_status')) {
             if ($request->call_status === 'placed') {
                 $query->where(function ($q) {
                     $q->where('call_duration_sec', '>', 1)->orWhere(function ($q2) {
@@ -52,9 +66,124 @@ class CallCenterController extends Controller
             $query->whereDate('contact_date', '<=', $request->date_to);
         }
 
-        $contacts = $query->orderByDesc('contact_date')->paginate(25)->withQueryString();
+        $contacts = in_array($tab, ['telegram', 'avito'], true)
+            ? null
+            : $query->orderByDesc('contact_date')->paginate(25)->withQueryString();
 
-        return view('call-center.index', compact('contacts'));
+        $telegram = app(CallCenterTelegramService::class);
+        $avito = app(CallCenterAvitoService::class);
+
+        return view('call-center.index', [
+            'contacts' => $contacts,
+            'tab' => $tab,
+            'telegramConfigured' => $telegram->isConfigured(),
+            'telegramChats' => $tab === 'telegram' ? $telegram->listChats() : [],
+            'avitoConfigured' => $avito->isConfigured(),
+            'avitoBranches' => $avito->branchesForUi(),
+            'avitoDefaultBranch' => (string) $request->query('branch', $avito->defaultBranchSlug()),
+        ]);
+    }
+
+    public function telegramChats(CallCenterTelegramService $telegram)
+    {
+        return response()->json([
+            'ok' => true,
+            'configured' => $telegram->isConfigured(),
+            'chats' => $telegram->listChats(),
+        ]);
+    }
+
+    public function telegramMessages(Request $request, string $chatId, CallCenterTelegramService $telegram)
+    {
+        $limit = (int) $request->query('limit', 80);
+
+        return response()->json(array_merge(['ok' => true], $telegram->messagesForChat($chatId, $limit)));
+    }
+
+    public function telegramSearch(Request $request, CallCenterTelegramService $telegram)
+    {
+        return response()->json($telegram->search((string) $request->query('q', '')));
+    }
+
+    public function telegramOpen(Request $request, CallCenterTelegramService $telegram)
+    {
+        $data = $request->validate([
+            'target' => 'nullable|string|max:128',
+            'client_id' => 'nullable|integer|min:1',
+        ]);
+
+        $target = trim((string) ($data['target'] ?? ''));
+        $clientId = isset($data['client_id']) ? (int) $data['client_id'] : null;
+
+        if ($target === '' && $clientId === null) {
+            return response()->json(['ok' => false, 'error' => 'Укажите @username, ID или клиента.'], 422);
+        }
+
+        $result = $telegram->openChat($target, $clientId);
+        $status = ($result['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($result, $status);
+    }
+
+    public function sendTelegramMessage(Request $request, string $chatId, CallCenterTelegramService $telegram)
+    {
+        $data = $request->validate([
+            'text' => 'required|string|max:3900',
+        ]);
+
+        $result = $telegram->sendMessage($chatId, $data['text']);
+        $status = ($result['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($result, $status);
+    }
+
+    public function avitoChats(Request $request, CallCenterAvitoService $avito)
+    {
+        $branch = (string) $request->query('branch', 'gorsky');
+
+        $result = $avito->listChats($branch);
+        if (($result['ok'] ?? false) && is_array($result['chats'] ?? null)) {
+            $inbox = app(AvitoInboxService::class);
+            foreach ($result['chats'] as $chat) {
+                if (is_array($chat)) {
+                    $inbox->upsertChat($branch, $chat);
+                }
+            }
+        }
+
+        return response()->json($result);
+    }
+
+    public function avitoMessages(Request $request, string $chatId, CallCenterAvitoService $avito)
+    {
+        $branch = (string) $request->query('branch', 'gorsky');
+        $limit = (int) $request->query('limit', 80);
+
+        $result = $avito->messagesForChat($branch, $chatId, $limit);
+        if (($result['ok'] ?? false) && is_array($result['chat'] ?? null) && is_array($result['messages'] ?? null)) {
+            app(AvitoInboxService::class)->ingestMessages($branch, $result['chat'], $result['messages']);
+        }
+
+        return response()->json($result);
+    }
+
+    public function sendAvitoMessage(Request $request, string $chatId, CallCenterAvitoService $avito)
+    {
+        $data = $request->validate([
+            'text' => 'required|string|max:3900',
+            'branch' => 'required|string|max:64',
+        ]);
+
+        $branch = (string) $data['branch'];
+        $result = $avito->sendMessage($branch, $chatId, $data['text']);
+        $status = ($result['ok'] ?? false) ? 200 : 422;
+
+        if (($result['ok'] ?? false) && is_array($result['message'] ?? null)) {
+            // Для хранения исходящего сообщения в локальном inbox лучше иметь message_id — но sendMessage сейчас его не возвращает.
+            // Поэтому сохраняем исходящее сообщение только когда AvitoApiService вернул id (улучшим позже).
+        }
+
+        return response()->json($result, $status);
     }
 
     /** Удалить все обращения по телефону, загруженные из MTS (external_id начинается с mts_). */
@@ -64,7 +193,7 @@ class CallCenterController extends Controller
             ->where('external_id', 'like', 'mts_%')
             ->delete();
 
-        return redirect()->route('call-center.index')->with('success', "Удалено обращений MTS: {$deleted}. При следующей выгрузке добавятся только новые звонки.");
+        return redirect()->route('call-center.index', ['tab' => 'calls'])->with('success', "Удалено обращений MTS: {$deleted}. При следующей выгрузке добавятся только новые звонки.");
     }
 
     /** Загрузить звонки из MTS VPBX (по умолчанию за последний день). Добавляются только те, которых ещё нет по external_id. */
@@ -77,7 +206,7 @@ class CallCenterController extends Controller
                 ? 'Для AC20: MTS_VPBX_PASSWORD (JWT), MTS_AC20_DOMAIN, MTS_AC20_TRUNK_ID (10 цифр). Режим: MTS_TELEPHONY_API=auto (по умолчанию) или ac20.'
                 : 'Укажите MTS_VPBX_URL и MTS_VPBX_PASSWORD в .env. Для AC20 добавьте домен и транк или явно MTS_TELEPHONY_API=vpbx.';
 
-            return redirect()->route('call-center.index')->with('error', 'Телефония MTS не настроена. '.$hint);
+            return redirect()->route('call-center.index', ['tab' => 'calls'])->with('error', 'Телефония MTS не настроена. '.$hint);
         }
 
         $days = (int) $request->input('days', 1);
@@ -89,6 +218,7 @@ class CallCenterController extends Controller
         $ac20Hint = $service->usesAc20Api() ? $service->lastAc20StatisticsHint() : null;
         $created = 0;
         $skipped = 0;
+        $enrichIds = [];
 
         foreach ($calls as $call) {
             $existing = CallCenterContact::where('external_id', $call['external_id'])->first();
@@ -105,9 +235,16 @@ class CallCenterController extends Controller
                 if (array_key_exists('ext_tracking_id', $call) && $call['ext_tracking_id'] !== null) {
                     $update['ext_tracking_id'] = $call['ext_tracking_id'];
                 }
+                if (! empty($call['line_phone'])) {
+                    $update['line_phone'] = $call['line_phone'];
+                }
+                if (! empty($call['direction'])) {
+                    $update['direction'] = $call['direction'];
+                }
                 if ($update !== []) {
                     $existing->update($update);
                 }
+                $enrichIds[] = (int) $existing->id;
                 $skipped++;
 
                 continue;
@@ -123,7 +260,7 @@ class CallCenterController extends Controller
                 $clientId = $client?->id;
             }
 
-            CallCenterContact::create([
+            $row = CallCenterContact::create([
                 'external_id' => $call['external_id'],
                 'ext_tracking_id' => $call['ext_tracking_id'] ?? null,
                 'client_id' => $clientId,
@@ -134,16 +271,29 @@ class CallCenterController extends Controller
                 'store_id' => null,
                 'contact_date' => $call['contact_date'],
                 'contact_phone' => $call['contact_phone'],
+                'line_phone' => $call['line_phone'] ?? null,
                 'contact_name' => null,
                 'notes' => $call['notes'],
                 'outcome' => null,
                 'created_by' => Auth::id(),
             ]);
+            $enrichIds[] = (int) $row->id;
             $created++;
         }
 
+        $enrichNote = '';
+        if ($enrichIds !== []) {
+            $contacts = CallCenterContact::whereIn('id', array_unique($enrichIds))
+                ->orderBy('id')
+                ->get();
+            $stats = app(CallCenterMtsAutoEnrichmentService::class)->enrichContacts($contacts, $contacts->count());
+            if ($stats['transcripts'] > 0 || $stats['recordings'] > 0 || $stats['portal_pushed'] > 0) {
+                $enrichNote = " Записей: {$stats['recordings']}, расшифровок: {$stats['transcripts']}, в портал ИИ: {$stats['portal_pushed']}.";
+            }
+        }
+
         if ($created > 0 || $skipped > 0) {
-            $message = "Загружено звонков MTS: создано {$created}, пропущено дублей {$skipped}.";
+            $message = "Загружено звонков MTS: создано {$created}, пропущено дублей {$skipped}.{$enrichNote}";
             $flashType = 'success';
         } elseif ($service->usesAc20Api()) {
             if ($ac20Hint !== null) {
@@ -157,53 +307,52 @@ class CallCenterController extends Controller
             $flashType = 'error';
         }
 
-        return redirect()->route('call-center.index')->with($flashType, $message);
+        return redirect()->route('call-center.index', ['tab' => 'calls'])->with($flashType, $message);
     }
 
-    /** Загрузить записи разговоров за последние 7 дней (звонки с ext_tracking_id, у которых ещё нет recording_path). */
+    /** Загрузить записи и расшифровки (звонки MTS без текста или без локальной записи). */
     public function syncMtsRecordings(Request $request): RedirectResponse
     {
-        set_time_limit(300);
+        set_time_limit(600);
         $service = app(MtsVpbxService::class);
         if (! $service->isConfigured()) {
-            return redirect()->route('call-center.index')->with('error', 'MTS VPBX не настроен.');
+            return redirect()->route('call-center.index', ['tab' => 'calls'])->with('error', 'MTS VPBX не настроен.');
         }
 
-        $dateFrom = now()->subDays(7)->startOfDay();
-        $dateTo = now();
-        $contacts = CallCenterContact::where('channel', 'phone')
-            ->whereNotNull('ext_tracking_id')
-            ->where('ext_tracking_id', '!=', '')
-            ->whereNull('recording_path')
-            ->whereBetween('contact_date', [$dateFrom, $dateTo])
-            ->get();
+        $backlogDays = (int) config('services.mts_vpbx.pipeline_backlog_days', 90);
+        $contacts = app(\App\Services\CallCenterMtsImportService::class)
+            ->contactsPendingEnrichment($backlogDays, 500);
 
         if ($contacts->isEmpty()) {
-            return redirect()->route('call-center.index')->with('info', 'Нет звонков с ID записи MTS за последние 7 дней. Сначала нажмите «Загрузить звонки с MTS» (за 7 или 30 дней) — тогда подтянутся статусы и ID записей.');
-        }
+            $pendingPortal = app(\App\Services\CallCenterMtsImportService::class)
+                ->contactsPendingPortalPush($backlogDays, 500);
+            if ($pendingPortal->isNotEmpty()) {
+                $portalStats = app(CallCenterMtsAutoEnrichmentService::class)
+                    ->pushContactsToPortal($pendingPortal, $pendingPortal->count());
 
-        $downloaded = 0;
-        $failed = 0;
-        foreach ($contacts as $contact) {
-            $path = $service->downloadRecording($contact->ext_tracking_id);
-            if ($path !== null) {
-                $updates = ['recording_path' => $path];
-                if ($service->usesAc20Api()) {
-                    $stt = $service->fetchCallSttTranscript((string) $contact->ext_tracking_id);
-                    if ($stt !== null && trim($stt) !== '') {
-                        $updates['recording_transcript'] = $stt;
-                    }
-                }
-                $contact->update($updates);
-                $downloaded++;
-            } else {
-                $failed++;
+                return redirect()->route('call-center.index', ['tab' => 'calls'])->with(
+                    'success',
+                    "Все звонки уже расшифрованы. В портал ИИ отправлено: {$portalStats['portal_pushed']}."
+                );
             }
+
+            return redirect()->route('call-center.index', ['tab' => 'calls'])->with('info', 'Нет звонков MTS без расшифровки за последние '.$backlogDays.' дн.');
         }
 
-        $message = "Записи разговоров: загружено {$downloaded}".($failed > 0 ? ", не удалось загрузить {$failed} (MTS может отдавать 404/429 для старых записей)." : '.');
+        $stats = app(CallCenterMtsAutoEnrichmentService::class)->enrichContacts($contacts, $contacts->count());
+        $portalStats = app(CallCenterMtsAutoEnrichmentService::class)->pushContactsToPortal(
+            app(\App\Services\CallCenterMtsImportService::class)->contactsPendingPortalPush($backlogDays, 500),
+            500,
+        );
+        $downloaded = $stats['recordings'];
+        $failed = max(0, $stats['processed'] - $stats['recordings'] - $stats['transcripts']);
 
-        return redirect()->route('call-center.index')->with($downloaded > 0 ? 'success' : 'info', $message);
+        $message = "Записи и расшифровки: обработано {$stats['processed']}, записей {$downloaded}, текстов {$stats['transcripts']}, в портал ИИ ".($stats['portal_pushed'] + $portalStats['portal_pushed']).'.';
+        if ($failed > 0) {
+            $message .= " Не удалось по части звонков (MTS 404/429 или нет OPENAI_API_KEY). Повторите позже — cron догонит остаток.";
+        }
+
+        return redirect()->route('call-center.index', ['tab' => 'calls'])->with($downloaded > 0 || $stats['transcripts'] > 0 ? 'success' : 'info', $message);
     }
 
     /** Скачать/воспроизвести запись разговора (файл из storage). ?download=1 — скачать, иначе отдать для воспроизведения. */
@@ -241,67 +390,26 @@ class CallCenterController extends Controller
             return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Транскрипция доступна только для звонков.');
         }
 
+        $recording = app(CallCenterMtsRecordingService::class);
+        $result = $recording->enrich($callCenterContact);
+        $callCenterContact->refresh();
+
+        if ($result['transcript_updated'] && trim((string) $callCenterContact->recording_transcript) !== '') {
+            $portal = app(\App\Services\AgentTeamsPortalNotifyService::class);
+            $res = $portal->pushMtsCall($callCenterContact);
+            if ($res['ok']) {
+                $callCenterContact->update(['portal_pushed_at' => now()]);
+            }
+
+            return redirect()->route('call-center.show', $callCenterContact)->with('success', 'Расшифровка сохранена и отправлена в портал ИИ-агентов.');
+        }
+
         $mts = app(MtsVpbxService::class);
-        $trackingId = $this->mtsTrackingIdForRecording($callCenterContact);
-        if ($mts->usesAc20Api() && $mts->isConfigured() && $trackingId !== null && $trackingId !== '' && preg_match('/^\d+$/', $trackingId)) {
-            $fromMts = $mts->fetchCallSttTranscript($trackingId);
-            if ($fromMts !== null && trim($fromMts) !== '') {
-                $callCenterContact->update(['recording_transcript' => $fromMts]);
+        $hint = $mts->usesAc20Api()
+            ? ' Для AC20: расшифровка может появиться в МТС позже — повторите через несколько минут или проверьте OPENAI_API_KEY (Whisper).'
+            : ' Проверьте OPENAI_API_KEY (Whisper и оформление текста).';
 
-                return redirect()->route('call-center.show', $callCenterContact)->with('success', 'Расшифровка сохранена (МТС Автосекретарь).');
-            }
-        }
-
-        $audioPath = null;
-        $tempPath = null;
-
-        if (! empty($callCenterContact->recording_path) && Storage::disk('local')->exists($callCenterContact->recording_path)) {
-            $audioPath = Storage::disk('local')->path($callCenterContact->recording_path);
-        } elseif (! empty($callCenterContact->ext_tracking_id) || ($callCenterContact->external_id && str_starts_with($callCenterContact->external_id, 'mts_'))) {
-            if (! $mts->isConfigured()) {
-                return redirect()->route('call-center.show', $callCenterContact)->with('error', 'MTS VPBX не настроен — нельзя загрузить запись для транскрипции.');
-            }
-            if ($trackingId === null || $trackingId === '') {
-                return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Нет идентификатора записи MTS (CallId / ext_tracking_id).');
-            }
-            $content = $mts->fetchRecordingContent($trackingId);
-            if ($content === null) {
-                return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Не удалось загрузить запись с MTS.');
-            }
-            $tempPath = storage_path('app/temp_rec_'.$callCenterContact->id.'_'.time().'.mp3');
-            if (! is_dir(dirname($tempPath))) {
-                mkdir(dirname($tempPath), 0755, true);
-            }
-            if (file_put_contents($tempPath, $content) === false) {
-                return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Не удалось сохранить запись во временный файл.');
-            }
-            $audioPath = $tempPath;
-        }
-
-        if ($audioPath === null || ! is_readable($audioPath)) {
-            return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Нет доступной записи для транскрипции. Загрузите запись или получите её с MTS.');
-        }
-
-        try {
-            $service = app(CallRecordingTranscriptionService::class);
-            $transcript = $service->transcribeAndFormat($audioPath);
-        } finally {
-            if ($tempPath !== null && is_file($tempPath)) {
-                @unlink($tempPath);
-            }
-        }
-
-        if ($transcript === null || trim($transcript) === '') {
-            $hint = $mts->usesAc20Api()
-                ? ' Для AC20: расшифровка может появиться в МТС позже — повторите через несколько минут или проверьте OPENAI_API_KEY (Whisper).'
-                : ' Проверьте OPENAI_API_KEY (Whisper и оформление текста).';
-
-            return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Не удалось получить текст.'.$hint);
-        }
-
-        $callCenterContact->update(['recording_transcript' => $transcript]);
-
-        return redirect()->route('call-center.show', $callCenterContact)->with('success', 'Расшифровка сохранена.');
+        return redirect()->route('call-center.show', $callCenterContact)->with('error', 'Не удалось получить текст.'.$hint);
     }
 
     /** Воспроизвести/скачать запись с MTS по запросу (по ext_tracking_id или по ID из external_id, например mts_21289855:1). */
@@ -350,7 +458,7 @@ class CallCenterController extends Controller
     {
         $data = $request->validate([
             'client_id' => 'nullable|exists:clients,id',
-            'channel' => 'required|in:phone,telegram,whatsapp,vk,visit,other',
+            'channel' => 'required|in:phone,telegram,avito,whatsapp,vk,visit,other',
             'direction' => 'required|in:incoming,outgoing',
             'store_id' => 'nullable|exists:stores,id',
             'contact_date' => 'required|date',
@@ -421,7 +529,7 @@ class CallCenterController extends Controller
 
         $data = $request->validate([
             'client_id' => 'nullable|exists:clients,id',
-            'channel' => 'required|in:phone,telegram,whatsapp,vk,visit,other',
+            'channel' => 'required|in:phone,telegram,avito,whatsapp,vk,visit,other',
             'direction' => 'required|in:incoming,outgoing',
             'store_id' => 'nullable|exists:stores,id',
             'contact_date' => 'required|date',
@@ -517,22 +625,6 @@ class CallCenterController extends Controller
     /** Идентификатор для API записи: ext_tracking_id или суффикс external_id (mts_* / mts_ac20_*). */
     private function mtsTrackingIdForRecording(CallCenterContact $callCenterContact): ?string
     {
-        $id = trim((string) ($callCenterContact->ext_tracking_id ?? ''));
-        if ($id !== '') {
-            return $id;
-        }
-        $external = (string) ($callCenterContact->external_id ?? '');
-        if (str_starts_with($external, 'mts_ac20_')) {
-            $rest = substr($external, strlen('mts_ac20_'));
-
-            return $rest !== '' ? $rest : null;
-        }
-        if (str_starts_with($external, 'mts_')) {
-            $rest = substr($external, 4);
-
-            return $rest !== '' ? $rest : null;
-        }
-
-        return null;
+        return app(CallCenterMtsRecordingService::class)->mtsTrackingId($callCenterContact);
     }
 }

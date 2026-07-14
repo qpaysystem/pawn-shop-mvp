@@ -170,7 +170,7 @@
                     <div class="mb-3">
                         <label class="form-label">Фото паспорта</label>
                         <p class="text-muted small mb-1">Сфотографируйте ровно разворот с ФИО и данными (серия, номер, кем выдан). Хорошее освещение, без бликов и размытия — тогда распознавание будет точнее.</p>
-                        <input type="file" id="passport_photo_input" class="form-control" accept="image/jpeg,image/png,image/jpg,image/webp" multiple>
+                        <input type="file" id="passport_photo_input" class="form-control" accept="image/jpeg,image/png,image/jpg,image/webp,image/heic,image/heif,.heic,.heif" capture="environment" multiple>
                         <div id="passport_photo_previews" class="d-flex flex-wrap gap-2 mt-2"></div>
                     </div>
                     <button type="button" class="btn btn-outline-primary" id="passport_parse_btn" disabled>
@@ -738,29 +738,112 @@
         });
     });
 
+    function compressPassportImage(file) {
+        return new Promise(function(resolve) {
+            if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+                resolve(file);
+                return;
+            }
+            if (file.size > 0 && file.size < 900000) {
+                resolve(file);
+                return;
+            }
+            var img = new Image();
+            var url = URL.createObjectURL(file);
+            img.onload = function() {
+                URL.revokeObjectURL(url);
+                var maxW = 1920;
+                var w = img.width;
+                var h = img.height;
+                if (w > maxW) {
+                    h = Math.round(h * maxW / w);
+                    w = maxW;
+                }
+                var canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                canvas.toBlob(function(blob) {
+                    if (!blob) {
+                        resolve(file);
+                        return;
+                    }
+                    var name = (file.name || 'passport').replace(/\.[^.]+$/i, '') + '.jpg';
+                    resolve(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
+                }, 'image/jpeg', 0.85);
+            };
+            img.onerror = function() {
+                URL.revokeObjectURL(url);
+                resolve(file);
+            };
+            img.src = url;
+        });
+    }
+
     passportParseBtn.addEventListener('click', function() {
         if (passportFiles.length === 0) return;
-        passportParseStatus.textContent = 'Распознавание…';
+        passportParseStatus.textContent = 'Подготовка фото…';
         passportParseStatus.className = 'ms-2 small text-muted';
         passportParseBtn.disabled = true;
+        function passportApiErrorMessage(data, status) {
+            if (!data) return 'Ошибка сервера (HTTP ' + status + ')';
+            if (data.error) return data.error;
+            if (data.message) return data.message;
+            if (data.errors) {
+                var first = Object.keys(data.errors)[0];
+                if (first && data.errors[first] && data.errors[first][0]) {
+                    var m = data.errors[first][0];
+                    if (m.indexOf('failed to upload') !== -1) {
+                        return 'Фото слишком большое для сервера. Повторите — браузер сожмёт снимок автоматически.';
+                    }
+                    return m;
+                }
+            }
+            return 'Ошибка сервера (HTTP ' + status + ')';
+        }
+        compressPassportImage(passportFiles[0]).then(function(uploadFile) {
+        passportParseStatus.textContent = 'Распознавание…';
         var formData = new FormData();
-        formData.append('photo', passportFiles[0]);
+        formData.append('photo', uploadFile);
         formData.append('_token', document.querySelector('input[name="_token"]').value);
-        fetch('{{ route("accept.parse-passport") }}', {
+        return fetch('{{ route("accept.parse-passport") }}', {
             method: 'POST',
             body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
         })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success && data.passport_data) {
-                // Русские буквы (заглавные), цифры, пробелы, знаки препинания и тире
-                function onlyRussianUppercase(str) {
-                    if (!str) return '';
-                    return (str + '').replace(/[^А-Яа-яЁё0-9\s.,:;\-–—]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+        .then(function(r) {
+            return r.text().then(function(text) {
+                var data = {};
+                try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { error: text ? text.slice(0, 200) : 'Неверный ответ сервера' }; }
+                return { ok: r.ok, status: r.status, data: data };
+            });
+        })
+        .then(function(res) {
+            var data = res.data || {};
+            if (!res.ok) {
+                passportParseStatus.textContent = passportApiErrorMessage(data, res.status);
+                passportParseStatus.className = 'ms-2 small text-danger';
+                return;
+            }
+            function onlyRussianUppercase(str) {
+                if (!str) return '';
+                return (str + '').replace(/[^А-Яа-яЁё0-9\s.,:;\-–—]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+            }
+            function hasFields(f) {
+                if (!f) return false;
+                return !!(f.last_name || f.first_name || f.patronymic || f.passport_series_number || f.issued_by);
+            }
+            if (data.success && (data.passport_data || hasFields(data.fields))) {
+                if (data.passport_data) {
+                    var raw = (data.passport_data + '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+                    if (raw.startsWith('{')) {
+                        try {
+                            var j = JSON.parse(raw);
+                            raw = [j.last_name, j.first_name, j.patronymic, j.passport_series_number, j.issued_by, j.issued_at].filter(Boolean).join(' ');
+                        } catch (e) { /* keep raw */ }
+                    }
+                    clientPassportTextarea.value = onlyRussianUppercase(raw);
                 }
-                var raw = (data.passport_data + '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-                clientPassportTextarea.value = onlyRussianUppercase(raw);
                 var f = data.fields || {};
                 var ln = document.getElementById('client_last_name');
                 var fn = document.getElementById('client_first_name');
@@ -772,25 +855,26 @@
                 if (document.getElementById('client_passport_series_number')) document.getElementById('client_passport_series_number').value = f.passport_series_number || '';
                 if (document.getElementById('client_passport_issued_by')) document.getElementById('client_passport_issued_by').value = onlyRussianUppercase(f.issued_by || '');
                 if (document.getElementById('client_passport_issued_at')) document.getElementById('client_passport_issued_at').value = f.issued_at || '';
-                var by = data.parsed_by === 'deepseek' ? ' (Deep Seek)' : data.parsed_by === 'openai' ? ' (OpenAI)' : ' (шаблон)';
+                var by = data.parsed_by === 'deepseek' ? ' (Deep Seek)' : data.parsed_by === 'openai' ? ' (OpenAI)' : data.parsed_by === 'gemini' ? ' (Gemini)' : data.parsed_by === 'tesseract' ? ' (Tesseract+ИИ)' : data.parsed_by && data.parsed_by.indexOf('tesseract') !== -1 ? ' (Tesseract)' : data.parsed_by === 'regex' ? ' (шаблон)' : '';
                 var hint = '';
-                if (data.parsed_by !== 'openai' && data.llm_error) {
-                    hint = ' ' + data.llm_error;
-                } else if (data.parsed_by !== 'openai' && data.parsed_by !== 'deepseek') {
-                    hint = '. Для AI: задайте DEEPSEEK_API_KEY или OPENAI_API_KEY в .env, затем php artisan config:clear';
-                }
+                if (data.llm_error) hint = ' ' + data.llm_error;
                 passportParseStatus.textContent = 'Данные заполнены по фото.' + by + hint;
                 passportParseStatus.className = 'ms-2 small text-success';
             } else {
-                passportParseStatus.textContent = data.error || 'Не удалось распознать текст.';
+                passportParseStatus.textContent = data.error || 'Не удалось распознать текст. Проверьте фото и ключи API на сервере.';
                 passportParseStatus.className = 'ms-2 small text-danger';
             }
         })
-        .catch(function() {
-            passportParseStatus.textContent = 'Ошибка запроса.';
+        .catch(function(err) {
+            passportParseStatus.textContent = 'Ошибка запроса: ' + (err && err.message ? err.message : 'сеть');
             passportParseStatus.className = 'ms-2 small text-danger';
         })
         .finally(function() { passportParseBtn.disabled = passportFiles.length === 0; });
+        }).catch(function() {
+            passportParseStatus.textContent = 'Не удалось обработать фото';
+            passportParseStatus.className = 'ms-2 small text-danger';
+            passportParseBtn.disabled = passportFiles.length === 0;
+        });
     });
 })();
 </script>

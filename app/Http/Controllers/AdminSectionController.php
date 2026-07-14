@@ -7,6 +7,28 @@ use Illuminate\View\View;
 /** Промежуточные страницы разделов админки со ссылками на подразделы. */
 class AdminSectionController extends Controller
 {
+    public function contactCenter(): View
+    {
+        if (! auth()->user()->canAccessContactCenter()) {
+            abort(403);
+        }
+
+        $links = [
+            ['route' => 'contact-center.leads.index', 'label' => 'Заявки', 'icon' => 'bi-inbox', 'hint' => 'Очередь черновиков и заявок'],
+            ['route' => 'contact-center.vitrine-priority.index', 'label' => 'Витрина к продаже', 'icon' => 'bi-shop-window', 'hint' => 'Комиссия на витрине: приоритет для Avito и скидок'],
+            ['route' => 'contact-center.avito-match.index', 'label' => 'Avito ↔ витрина', 'icon' => 'bi-table', 'hint' => 'Сверка активных объявлений Avito с инвентаризацией точки'],
+            ['route' => 'call-center.index', 'label' => 'Коммуникации', 'icon' => 'bi-headset', 'hint' => 'Чаты Telegram/Avito и звонки'],
+            ['route' => 'call-center.analytics', 'label' => 'Аналитика', 'icon' => 'bi-graph-up', 'hint' => 'Сводка по обращениям'],
+        ];
+
+        return view('admin.section-hub', [
+            'title' => 'Контакт центр',
+            'section' => 'contact-center',
+            'intro' => 'Очередь обращений и коммуникации с клиентами.',
+            'links' => $links,
+        ]);
+    }
+
     public function clients(): View
     {
         $user = auth()->user();
@@ -69,6 +91,47 @@ class AdminSectionController extends Controller
         ]);
     }
 
+    public function management(): View
+    {
+        if (! auth()->user()->hasFullStoreAccess()) {
+            abort(403);
+        }
+
+        $links = [
+            [
+                'route' => 'management.personnel.index',
+                'label' => 'Персонал',
+                'icon' => 'bi-people',
+                'hint' => 'Журнал сотрудников, карточки, компетенции',
+            ],
+            [
+                'route' => 'management.reports.index',
+                'label' => 'Отчёты',
+                'icon' => 'bi-file-earmark-bar-graph',
+                'hint' => 'Залоги, прибыль, остатки, Acuerdo и собрания',
+            ],
+            [
+                'label' => 'Регламентные документы',
+                'icon' => 'bi-journal-text',
+                'hint' => 'Инструкции, положения и нормативные документы',
+                'placeholder' => true,
+            ],
+            [
+                'route' => 'management.tasks.index',
+                'label' => 'Задачи',
+                'icon' => 'bi-check2-square',
+                'hint' => 'Журнал и канбан: постановка и контроль задач',
+            ],
+        ];
+
+        return view('admin.section-hub', [
+            'title' => 'Управление',
+            'section' => 'management',
+            'intro' => 'Персонал, отчёты, регламентные документы и задачи сети.',
+            'links' => $links,
+        ]);
+    }
+
     public function settings(): View
     {
         $user = auth()->user();
@@ -81,6 +144,7 @@ class AdminSectionController extends Controller
             ['route' => 'profile.show', 'label' => 'Профиль', 'icon' => 'bi-person', 'hint' => 'Ваш аккаунт'],
         ];
         if ($user->isSuperAdmin()) {
+            $links[] = ['route' => 'settings.system.index', 'label' => 'Системные настройки', 'icon' => 'bi-sliders', 'hint' => 'Telegram, портал ИИ-агентов, общие'];
             $links[] = ['route' => 'stores.index', 'label' => 'Магазины', 'icon' => 'bi-shop', 'hint' => 'Филиалы сети'];
             $links[] = ['route' => 'users.index', 'label' => 'Пользователи', 'icon' => 'bi-person-gear', 'hint' => 'Сотрудники и роли'];
             $links[] = ['route' => 'kb.categories.index', 'label' => 'База знаний — админка', 'icon' => 'bi-pencil-square', 'hint' => 'Категории и статьи'];

@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
+use App\Support\OpenAiHttp;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -38,8 +38,7 @@ class CallRecordingTranscriptionService
             return null;
         }
 
-        $response = Http::timeout(120)
-            ->withToken($apiKey)
+        $response = OpenAiHttp::client(120)
             ->attach('file', file_get_contents($audioPath), basename($audioPath))
             ->post('https://api.openai.com/v1/audio/transcriptions', [
                 'model' => 'whisper-1',
@@ -81,8 +80,7 @@ PROMPT;
 
         try {
             $model = config('services.openai.model', 'gpt-4o-mini');
-            $response = Http::timeout(60)
-                ->withToken($apiKey)
+            $response = OpenAiHttp::client(60)
                 ->post('https://api.openai.com/v1/chat/completions', [
                     'model' => $model,
                     'messages' => [

@@ -35,5 +35,6 @@ class Kernel extends HttpKernel
         'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
         'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
         'role' => \App\Http\Middleware\CheckRole::class,
+        'agent.teams.token' => \App\Http\Middleware\VerifyAgentTeamsToken::class,
     ];
 }

@@ -72,6 +72,19 @@ class PawnContract extends Model
         return round($amount + ($amount * $percent / 100), 2);
     }
 
+    /** active | overdue | redeemed — для mobile API v1. */
+    public function getComputedStatusAttribute(): string
+    {
+        if ($this->is_redeemed) {
+            return 'redeemed';
+        }
+        if ($this->expiry_date && $this->expiry_date->isPast()) {
+            return 'overdue';
+        }
+
+        return 'active';
+    }
+
     /** Генерация номера договора: L-2024-00001 */
     public static function generateContractNumber(): string
     {

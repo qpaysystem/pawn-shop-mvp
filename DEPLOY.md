@@ -10,6 +10,7 @@
 |----------|----------|
 | **Первый раз выкладываете** | Часть 1 (подготовка) → Часть 2 (БД в панели) → Часть 3 (SSH, загрузка) → Часть 4 (шаги 7–14) → Часть 5 (домен) → Часть 6 (проверка). |
 | **Уже настроено, обновляете код** | Локально: `git push origin main`. На сервере: `cd ~/pawn-shop-mvp && git pull origin main && ./deploy.sh` |
+| **Параллельная копия в LAN (`lombard.home`, Docker)** | Не заменяет Timeweb; см. **`DEPLOY_HOME_LAN.md`**, в CRM: **`infra/web-host/lombard-portal/`** |
 | **Одной командой с вашего ПК** | `git push origin main && ssh ЛОГИН@ХОСТ 'cd ~/pawn-shop-mvp && git pull origin main && ./deploy.sh'` |
 | **Шаблон скрипта (push + SSH + deploy.sh)** | Скопируйте `scripts/deploy-remote.example.sh` → `scripts/deploy-remote.sh`, задайте `DEPLOY_SSH` и запустите (файл в `.gitignore`). |
 

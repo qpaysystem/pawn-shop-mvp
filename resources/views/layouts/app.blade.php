@@ -362,7 +362,13 @@
                 'pawn-contracts.*',
                 'commission-contracts.*',
                 'purchase-contracts.*',
+            ]);
+            $isContactCenterSection = request()->routeIs([
+                'section.contact-center',
                 'call-center.*',
+                'contact-center.leads.*',
+                'contact-center.vitrine-priority.*',
+                'contact-center.avito-match.*',
             ]);
             $isMarketingSection = request()->routeIs(['section.marketing', 'marketing.*']);
             $isFinanceSection = request()->routeIs([
@@ -371,12 +377,19 @@
                 'expenses.*',
                 'expense-types.*',
                 'employees.*',
+                'management.personnel.*',
                 'payroll-accruals.*',
                 'bank-accounts.*',
                 'documents.*',
                 'chart-of-accounts.*',
                 'document-ledger-templates.*',
                 'document-ledger-entries.*',
+            ]);
+            $isManagementSection = request()->routeIs([
+                'section.management',
+                'management.personnel.*',
+                'management.reports.*',
+                'management.tasks.*',
             ]);
             $isSettingsSection = request()->routeIs([
                 'section.settings',
@@ -398,6 +411,16 @@
                 <li class="nav-item">
                     <a class="nav-link section-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><i class="bi bi-grid-1x2"></i> Дашборд</a>
                 </li>
+                @if(auth()->user()->canAccessContactCenter() && ! auth()->user()->isContactCenter())
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ $isContactCenterSection ? 'active' : '' }}" href="{{ route('section.contact-center') }}"><i class="bi bi-headset"></i> Контакт центр</a>
+                </li>
+                @endif
+                @if(auth()->user()->isContactCenter())
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ $isContactCenterSection ? 'active' : '' }}" href="{{ route('section.contact-center') }}"><i class="bi bi-headset"></i> Контакт центр</a>
+                </li>
+                @else
                 <li class="nav-item">
                     <a class="nav-link section-nav-link {{ $isClientsSection ? 'active' : '' }}" href="{{ route('section.clients') }}"><i class="bi bi-people-fill"></i> Работа с клиентами</a>
                 </li>
@@ -407,6 +430,12 @@
                 <li class="nav-item">
                     <a class="nav-link section-nav-link {{ $isFinanceSection ? 'active' : '' }}" href="{{ route('section.finance') }}"><i class="bi bi-wallet2"></i> Финансы</a>
                 </li>
+                @if(auth()->user()->hasFullStoreAccess())
+                <li class="nav-item">
+                    <a class="nav-link section-nav-link {{ $isManagementSection ? 'active' : '' }}" href="{{ route('section.management') }}"><i class="bi bi-kanban"></i> Управление</a>
+                </li>
+                @endif
+                @endif
                 <li class="nav-item">
                     <a class="nav-link section-nav-link {{ $isSettingsSection ? 'active' : '' }}" href="{{ route('section.settings') }}"><i class="bi bi-gear"></i> Настройки</a>
                 </li>
