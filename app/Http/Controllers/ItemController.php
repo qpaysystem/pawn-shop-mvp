@@ -136,17 +136,24 @@ class ItemController extends Controller
                 $title .= ($pe->status?->name || $pe->status_name)
                     ? ': '.($pe->status?->name ?? $pe->status_name)
                     : '';
+            } elseif ($pe->description) {
+                $title .= ': '.mb_strimwidth($pe->description, 0, 80, '…');
             }
+            $kind = match (true) {
+                in_array($pe->event_type, [LmbProductEvent::TYPE_MOVE, LmbProductEvent::TYPE_MOVE_PENDING], true) => 'move',
+                $pe->event_type === LmbProductEvent::TYPE_STATUS => 'status',
+                in_array($pe->event_type, ['Выкуп', 'Поступление залог', 'Поступление перезалог', 'Поступление скупка', 'Продажа'], true) => 'contract',
+                default => 'lmb_event',
+            };
             $events[] = [
                 'at' => $pe->event_at ? Carbon::parse($pe->event_at) : Carbon::parse($pe->created_at),
-                'kind' => in_array($pe->event_type, [LmbProductEvent::TYPE_MOVE, LmbProductEvent::TYPE_MOVE_PENDING], true)
-                    ? 'move'
-                    : 'status',
+                'kind' => $kind,
                 'title' => $title,
                 'meta' => trim(implode(' · ', array_filter([
                     $pe->event_number ? '№'.$pe->event_number : null,
                     $pe->responsible,
-                    $pe->applied ? null : 'без применения к карточке',
+                    $pe->source_doc_ref,
+                    ($kind === 'move' || $kind === 'status') && ! $pe->applied ? 'без применения к карточке' : null,
                 ]))),
             ];
         }

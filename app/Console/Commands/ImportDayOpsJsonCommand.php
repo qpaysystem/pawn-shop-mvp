@@ -11,7 +11,8 @@ class ImportDayOpsJsonCommand extends Command
     protected $signature = 'lmb:import-day-ops-json
                             {file : Путь к JSON (ДанныеИз1С_*.json)}
                             {--dry-run : Только разбор и счётчики, без записи}
-                            {--force : Подтвердить запись в БД}';
+                            {--force : Подтвердить запись в БД}
+                            {--refresh-events : Обновить уже загруженные СобытияПоТовару (payload/item/store)}';
 
     protected $description = 'Импорт опердня 1С: залоги/выкупы, скупка, продажи, ПКО/РКО, банк, события по товару';
 
@@ -27,7 +28,7 @@ class ImportDayOpsJsonCommand extends Command
         }
 
         $this->info(($dryRun ? '[dry-run] ' : '').'Импорт: '.$file);
-        $result = $service->import($file, $dryRun);
+        $result = $service->import($file, $dryRun, (bool) $this->option('refresh-events'));
 
         $this->table(['Метрика', 'Значение'], collect($result['stats'])->map(fn ($v, $k) => [$k, $v])->values()->all());
         $this->line('Всего документов в файле: '.$result['total']);

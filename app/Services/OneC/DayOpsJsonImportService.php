@@ -6,9 +6,11 @@ use App\Models\Account;
 use App\Models\BankAccount;
 use App\Models\BankStatement;
 use App\Models\BankStatementLine;
+use App\Models\CallCenterContact;
 use App\Models\CashDocument;
 use App\Models\CashOperationType;
 use App\Models\Client;
+use App\Models\ClientVisit;
 use App\Models\Item;
 use App\Models\ItemStatus;
 use App\Models\ItemStatusHistory;
@@ -25,7 +27,8 @@ use Illuminate\Support\Str;
 /**
  * Импорт ежедневной выгрузки 1С (ДанныеИз1С_DD_MM_YYYY.json)
  * в БД ломбард-портала: залоги/выкупы, скупка, продажи, ПКО/РКО, банк,
- * события по товару (перемещения, смена статуса).
+ * события по товару (перемещения, смена статуса),
+ * CRM-события (личные встречи, ревизии; звонки пропускаются — MTS).
  */
 class DayOpsJsonImportService
 {
@@ -54,14 +57,17 @@ class DayOpsJsonImportService
 
     private bool $dryRun = false;
 
+    private bool $refreshProductEvents = false;
+
     private ?LedgerService $ledger = null;
 
     /**
-     * @return array{ok: bool, stats: array<string, int>, errors: list<string>, warnings: list<string>, total: int}
+     * @return array{ok: bool, stats: array<string, int>, errors: list<string>, warnings: list<string>, total: int>
      */
-    public function import(string $filePath, bool $dryRun = false): array
+    public function import(string $filePath, bool $dryRun = false, bool $refreshProductEvents = false): array
     {
         $this->dryRun = $dryRun;
+        $this->refreshProductEvents = $refreshProductEvents;
         $this->reset();
         $this->ledger = app(LedgerService::class);
         $this->ensureCashOperationTypes();
@@ -101,6 +107,7 @@ class DayOpsJsonImportService
             'ПоступлениеНаРасчетныйСчет' => 60,
             'СписаниеСРасчетногоСчета' => 70,
             'СобытияПоТовару' => 80,
+            'Событие' => 90,
         ];
 
         usort($data, function ($a, $b) use ($priority) {
@@ -128,6 +135,7 @@ class DayOpsJsonImportService
                     'ПоступлениеНаРасчетныйСчет' => $this->importBank($row, true),
                     'СписаниеСРасчетногоСчета' => $this->importBank($row, false),
                     'СобытияПоТовару' => $this->importProductEvent($row),
+                    'Событие' => $this->importCrmEvent($row),
                     default => $this->bump('skipped_other'),
                 };
             } catch (\Throwable $e) {
@@ -517,11 +525,144 @@ class DayOpsJsonImportService
         }
     }
 
+    /**
+     * CRM-события 1С: личные встречи → колл-центр + client_visits,
+     * ревизии → колл-центр. Телефонные звонки пропускаем (идут из MTS).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function importCrmEvent(array $row): void
+    {
+        $kind = trim((string) ($row['ВидОперации'] ?? ''));
+        if ($kind === 'Телефонный звонок') {
+            $this->bump('skipped_phone_event');
+
+            return;
+        }
+        if (! in_array($kind, ['Личная встреча', 'Ревизия'], true)) {
+            $this->bump('skipped_other');
+
+            return;
+        }
+
+        $number = trim((string) ($row['Номер'] ?? ''));
+        $ext = '1c:crm-event:'.$number;
+        if ($number !== '' && CallCenterContact::query()->where('external_id', $ext)->exists()) {
+            $this->bump($kind === 'Ревизия' ? 'revision_exists' : 'visit_exists');
+
+            return;
+        }
+
+        $at = $this->parseDate($row['НачалоСобытия'] ?? $row['Дата'] ?? null);
+        $store = $this->resolveStore((string) ($row['Филиал'] ?? ''));
+        $client = $this->resolveContragent($row['Контрагент'] ?? null);
+        $goal = trim((string) ($row['Цель'] ?? ''));
+        $result = trim((string) ($row['Результат'] ?? ''));
+        $source = trim((string) ($row['ИсточникРекламы'] ?? ''));
+        $basis = trim((string) ($row['ДокументОснования'] ?? ''));
+        $responsible = trim((string) ($row['Ответственный'] ?? ''));
+        $direction = match (trim((string) ($row['ТипСобытия'] ?? ''))) {
+            'Исходящее' => 'outgoing',
+            default => 'incoming',
+        };
+
+        $notesParts = array_filter([
+            $kind === 'Ревизия' ? 'Ревизия 1С' : null,
+            $goal !== '' ? 'Цель: '.$goal : null,
+            $result !== '' ? 'Результат: '.$result : null,
+            $source !== '' ? 'Источник: '.$source : null,
+            $basis !== '' ? 'Основание: '.$basis : null,
+            $responsible !== '' ? 'Ответственный: '.$responsible : null,
+            $number !== '' ? '№'.$number : null,
+        ]);
+        $notes = $this->shortField(implode(' · ', $notesParts), 2000);
+
+        $contactName = null;
+        if (is_array($row['Контрагент'] ?? null)) {
+            $contactName = trim((string) (($row['Контрагент']['НаименованиеПолное'] ?? '')
+                ?: ($row['Контрагент']['Наименование'] ?? '')));
+        }
+
+        $channel = $kind === 'Ревизия' ? 'other' : 'visit';
+        $outcome = $this->mapCrmEventOutcome($result, $goal);
+
+        if ($this->dryRun) {
+            $this->bump($kind === 'Ревизия' ? 'revision_created' : 'visit_created');
+
+            return;
+        }
+
+        CallCenterContact::create([
+            'external_id' => $ext,
+            'client_id' => $client?->id,
+            'channel' => $channel,
+            'direction' => $direction,
+            'store_id' => $store?->id,
+            'contact_date' => $at ?? now(),
+            'contact_name' => $this->shortField($contactName, 255),
+            'contact_phone' => $client?->phone,
+            'notes' => $notes,
+            'outcome' => $outcome,
+            'created_by' => null,
+        ]);
+
+        if ($kind === 'Личная встреча' && $store && $client) {
+            ClientVisit::create([
+                'store_id' => $store->id,
+                'client_id' => $client->id,
+                'visit_purpose' => $this->mapVisitPurpose($goal, $result),
+                'visited_at' => $at ?? now(),
+                'created_by' => null,
+            ]);
+            $this->bump('client_visit_created');
+        }
+
+        $this->bump($kind === 'Ревизия' ? 'revision_created' : 'visit_created');
+    }
+
+    private function mapCrmEventOutcome(string $result, string $goal): ?string
+    {
+        $text = mb_strtolower($result.' '.$goal);
+        if (str_contains($text, 'залог')) {
+            return 'converted_pawn';
+        }
+        if (str_contains($text, 'скупк')) {
+            return 'converted_purchase';
+        }
+        if (str_contains($text, 'комисс')) {
+            return 'converted_commission';
+        }
+        if ($result !== '') {
+            return 'closed';
+        }
+
+        return 'new';
+    }
+
+    private function mapVisitPurpose(string $goal, string $result): string
+    {
+        $text = mb_strtolower($goal.' '.$result);
+        if (str_contains($text, 'выкуп')) {
+            return ClientVisit::PURPOSE_REDEMPTION;
+        }
+        if (str_contains($text, 'оценк') || str_contains($text, 'залог')) {
+            return ClientVisit::PURPOSE_APPRAISAL;
+        }
+        if (str_contains($text, 'идентификац')) {
+            return ClientVisit::PURPOSE_IDENTIFICATION;
+        }
+
+        return ClientVisit::PURPOSE_NON_TARGET;
+    }
+
     private function importProductEvent(array $row): void
     {
         $number = trim((string) ($row['Номер'] ?? ''));
         $ext = '1c:product-event:'.$number;
-        if ($number !== '' && LmbProductEvent::query()->where('external_id', $ext)->exists()) {
+        $existing = ($number !== '')
+            ? LmbProductEvent::query()->where('external_id', $ext)->first()
+            : null;
+        if ($existing && ! $this->refreshProductEvents) {
             $this->bump('product_event_exists');
 
             return;
@@ -590,7 +731,7 @@ class DayOpsJsonImportService
             $applied = true;
         }
 
-        if ($item && $status && ($eventType === LmbProductEvent::TYPE_STATUS || $statusName !== '')) {
+        if ($item && $status && $eventType === LmbProductEvent::TYPE_STATUS) {
             if ((int) $item->status_id !== (int) $status->id) {
                 $oldStatusId = $item->status_id;
                 $item->update(['status_id' => $status->id]);
@@ -606,7 +747,7 @@ class DayOpsJsonImportService
             $applied = true;
         }
 
-        LmbProductEvent::create([
+        $attrs = [
             'external_id' => $ext,
             'event_type' => $eventType === LmbProductEvent::TYPE_OTHER
                 ? mb_substr($kind !== '' ? $kind : 'other', 0, 64)
@@ -629,9 +770,17 @@ class DayOpsJsonImportService
             'source_doc_ref' => $this->shortField($sourceRef, 255),
             'applied' => $applied,
             'payload' => $this->slimRow($row),
-        ]);
+        ];
 
-        $this->bump('product_event_created');
+        if ($existing) {
+            $existing->fill($attrs);
+            $existing->save();
+            $this->bump('product_event_refreshed');
+        } else {
+            LmbProductEvent::create($attrs);
+            $this->bump('product_event_created');
+        }
+
         if ($isActionable) {
             $this->bump($applied ? 'product_event_applied' : 'product_event_unmatched');
         }
@@ -660,6 +809,20 @@ class DayOpsJsonImportService
             }
         }
 
+        $purchaseRef = trim((string) ($row['ДокументПоступленияСкупка'] ?? ''));
+        if ($purchaseRef !== '') {
+            $docNumber = $this->extractDocNumber($purchaseRef);
+            if ($docNumber !== null) {
+                $purchase = PurchaseContract::query()
+                    ->where('contract_number', $docNumber)
+                    ->orWhere('lmb_doc_uid', '1c:purchase:'.$docNumber)
+                    ->first();
+                if ($purchase?->item_id) {
+                    return Item::query()->find($purchase->item_id);
+                }
+            }
+        }
+
         $sales = $row['ДокументыПродажи'] ?? null;
         if (is_array($sales)) {
             foreach ($sales as $saleDoc) {
@@ -684,7 +847,144 @@ class DayOpsJsonImportService
             }
         }
 
+        $returnRef = trim((string) ($row['ДокументВозврата'] ?? ''));
+        if ($returnRef !== '') {
+            $docNumber = $this->extractDocNumber($returnRef);
+            if ($docNumber !== null) {
+                $sale = SaleContract::query()
+                    ->where('contract_number', $docNumber)
+                    ->orWhere('external_id', '1c:sale:'.$docNumber)
+                    ->first();
+                if ($sale?->item_id) {
+                    return Item::query()->find($sale->item_id);
+                }
+            }
+        }
+
+        // Скупка в JSON часто без номера документа — ищем договор по клиенту и дате.
+        $at = $this->parseDate($row['Дата'] ?? null);
+        $client = $this->resolveContragent($row['Контрагент'] ?? null);
+        if ($client && $at) {
+            $purchase = PurchaseContract::query()
+                ->where('client_id', $client->id)
+                ->whereDate('purchase_date', $at->toDateString())
+                ->whereNotNull('item_id')
+                ->orderByDesc('id')
+                ->first();
+            if ($purchase?->item_id) {
+                return Item::query()->find($purchase->item_id);
+            }
+        }
+
         return null;
+    }
+
+    /**
+     * Повторная привязка уже сохранённых событий (item_id / склад / статус)
+     * по payload из 1С. Нужно после догрузки договоров или правок резолвера.
+     *
+     * @return array<string, int>
+     */
+    public function relinkExisting(?string $onlyType = null): array
+    {
+        $this->stats = [];
+        $q = LmbProductEvent::query()->orderBy('id');
+        if ($onlyType !== null && $onlyType !== '') {
+            $q->where('event_type', $onlyType);
+        }
+
+        foreach ($q->cursor() as $event) {
+            $row = is_array($event->payload) ? $event->payload : [];
+            if ($row === []) {
+                $this->bump('relink_skipped_empty');
+
+                continue;
+            }
+
+            $kind = trim((string) ($row['ВидОперации'] ?? $event->event_type));
+            $eventType = match ($kind) {
+                'Перемещение' => LmbProductEvent::TYPE_MOVE,
+                'К перемещению' => LmbProductEvent::TYPE_MOVE_PENDING,
+                'Смена статуса (залог/товар)' => LmbProductEvent::TYPE_STATUS,
+                default => $event->event_type,
+            };
+
+            $fromName = trim((string) (($row['НачальныйОтправитель'] ?? '') !== ''
+                ? $row['НачальныйОтправитель']
+                : ($row['Филиал'] ?? '')));
+            $fromStore = $fromName !== '' ? $this->resolveStore($fromName) : null;
+
+            $toName = $kind === 'К перемещению'
+                ? trim((string) ($row['ФилиалПолучатель'] ?? ''))
+                : trim((string) (($row['ПолучательКонечный'] ?? '') !== ''
+                    ? $row['ПолучательКонечный']
+                    : ($row['ФилиалПолучатель'] ?? '')));
+            $toStore = $toName !== '' ? $this->resolveStore($toName) : null;
+
+            $statusName = trim((string) ($row['СтатусТовара'] ?? $event->status_name ?? ''));
+            $status = $statusName !== '' ? $this->resolveItemStatusFrom1c($statusName) : null;
+
+            $item = $event->item_id
+                ? Item::query()->find($event->item_id)
+                : $this->resolveItemFromProductEvent($row, $fromStore ?? $toStore);
+
+            $applied = (bool) $event->applied;
+            if ($item && in_array($eventType, [LmbProductEvent::TYPE_MOVE, LmbProductEvent::TYPE_MOVE_PENDING], true) && $toStore) {
+                if ((int) $item->store_id !== (int) $toStore->id) {
+                    $item->update(['store_id' => $toStore->id]);
+                }
+                $applied = true;
+            }
+
+            if ($item && $status && $eventType === LmbProductEvent::TYPE_STATUS) {
+                if ((int) $item->status_id !== (int) $status->id) {
+                    $oldStatusId = $item->status_id;
+                    $item->update(['status_id' => $status->id]);
+                    $history = new ItemStatusHistory([
+                        'item_id' => $item->id,
+                        'old_status_id' => $oldStatusId,
+                        'new_status_id' => $status->id,
+                        'changed_by' => null,
+                    ]);
+                    $history->created_at = $event->event_at ?? now();
+                    $history->save();
+                }
+                $applied = true;
+            }
+
+            $changed = false;
+            if ($item && (int) $event->item_id !== (int) $item->id) {
+                $event->item_id = $item->id;
+                $changed = true;
+                $this->bump('relink_item_linked');
+            }
+            if ($fromStore && (int) $event->from_store_id !== (int) $fromStore->id) {
+                $event->from_store_id = $fromStore->id;
+                $changed = true;
+            }
+            if ($toStore && (int) $event->to_store_id !== (int) $toStore->id) {
+                $event->to_store_id = $toStore->id;
+                $changed = true;
+            }
+            if ($status && (int) $event->status_id !== (int) $status->id) {
+                $event->status_id = $status->id;
+                $changed = true;
+            }
+            if ($applied !== (bool) $event->applied) {
+                $event->applied = $applied;
+                $changed = true;
+                $this->bump($applied ? 'relink_applied' : 'relink_unapplied');
+            }
+
+            if ($changed) {
+                $event->save();
+                $this->bump('relink_updated');
+            } else {
+                $this->bump('relink_unchanged');
+            }
+        }
+
+        return $this->stats;
     }
 
     private function extractDocNumber(string $label): ?string
@@ -975,8 +1275,9 @@ class DayOpsJsonImportService
                 return 'Мичурина, 23/1';
             }
         }
+        // Сейф — отдельная точка хранения, не витрина «Горский, 1».
         if (str_contains($lower, 'сейф') && str_contains($lower, 'горский')) {
-            return 'Горский, 1';
+            return 'Горский, сейф';
         }
         if (str_starts_with($lower, 'комиссионка')) {
             return trim((string) preg_replace('/^комиссионка\s+/ui', '', $name));
@@ -1137,14 +1438,50 @@ class DayOpsJsonImportService
         $copy = $row;
         unset(
             $copy['Залогодатель'],
-            $copy['Контрагент'],
             $copy['ТабличнаяЧасть'],
             $copy['КассовыеОрдера'],
             $copy['РасшифровкаПлатежа'],
-            $copy['ТоварыОценки'],
             $copy['ФотоДокументов'],
             $copy['РекламныеПлощадки'],
+            $copy['КонтактнаяИнформация'],
+            $copy['КонтактныеДанные'],
         );
+
+        // Компактный контрагент — нужен для повторной привязки событий.
+        if (isset($copy['Контрагент']) && is_array($copy['Контрагент'])) {
+            $c = $copy['Контрагент'];
+            $copy['Контрагент'] = array_filter([
+                'Код' => $c['Код'] ?? null,
+                'Наименование' => $c['Наименование'] ?? null,
+                'НаименованиеПолное' => $c['НаименованиеПолное'] ?? null,
+                'Телефона1' => $c['Телефона1'] ?? null,
+            ], static fn ($v) => $v !== null && $v !== '');
+            if ($copy['Контрагент'] === []) {
+                unset($copy['Контрагент']);
+            }
+        }
+
+        // Компактная номенклатура оценки (без тяжёлых вложений).
+        if (isset($copy['ТоварыОценки']) && is_array($copy['ТоварыОценки'])) {
+            $slimNom = [];
+            foreach (array_slice($copy['ТоварыОценки'], 0, 3) as $line) {
+                if (! is_array($line)) {
+                    continue;
+                }
+                $nom = is_array($line['Номенклатура'] ?? null) ? $line['Номенклатура'] : $line;
+                $slimNom[] = array_filter([
+                    'Код' => $nom['Код'] ?? null,
+                    'Наименование' => $nom['Наименование'] ?? null,
+                    'Цена' => $line['Цена'] ?? $nom['Цена'] ?? null,
+                    'Ссуда' => $nom['Ссуда'] ?? null,
+                ], static fn ($v) => $v !== null && $v !== '');
+            }
+            if ($slimNom === []) {
+                unset($copy['ТоварыОценки']);
+            } else {
+                $copy['ТоварыОценки'] = $slimNom;
+            }
+        }
 
         return $copy;
     }

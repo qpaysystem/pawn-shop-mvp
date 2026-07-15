@@ -92,6 +92,7 @@
                                 'reservation' => 'bi-bookmark-check text-info',
                                 'lead' => 'bi-inbox text-primary',
                                 'contract' => 'bi-file-text text-success',
+                                'lmb_event' => 'bi-activity text-secondary',
                                 'avito_listing' => 'bi-shop text-warning',
                                 'avito_contact' => 'bi-chat-dots text-warning',
                                 default => 'bi-circle text-muted',
